@@ -10,6 +10,10 @@ import os
 import types
 from unittest.mock import patch, MagicMock
 
+# Add project root to path
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
+
 # Stub heavy third-party modules that core.__init__ transitively imports
 # so we can test the converter without installing them in CI.
 for _mod_name in ("gradio", "gradio.themes"):

@@ -1,4 +1,9 @@
 import os
+import sys
+
+# Add project root to path
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
 
 import numpy as np
 

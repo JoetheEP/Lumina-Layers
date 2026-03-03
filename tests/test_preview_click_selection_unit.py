@@ -1,7 +1,12 @@
 """Unit tests for preview-click selection safety and HTML rendering."""
 
 import sys
+import os
 from unittest.mock import MagicMock
+
+# Add project root to path
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
 
 # Stub gradio for environments where full UI dependencies are unavailable.
 for _mod_name in ("gradio", "gradio.themes"):
