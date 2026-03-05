@@ -514,9 +514,9 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
     """
     # Input validation
     if image_path is None:
-        return None, None, None, "[ERROR] Please upload an image"
+        return None, None, None, "[ERROR] Please upload an image", None
     if lut_path is None:
-        return None, None, None, "[WARNING] Please select or upload a .npy calibration file!"
+        return None, None, None, "[WARNING] Please select or upload a .npy calibration file!", None
     
     # Handle LUT path (supports string path or Gradio File object)
     if isinstance(lut_path, str):
@@ -524,7 +524,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
     elif hasattr(lut_path, 'name'):
         actual_lut_path = lut_path.name
     else:
-        return None, None, None, "[ERROR] Invalid LUT file format"
+        return None, None, None, "[ERROR] Invalid LUT file format", None
     
     # Handle backing separation: override backing_color_id if separate_backing is True
     # Error handling for checkbox state (Requirement 8.4)
@@ -578,7 +578,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             # Keep vector export behavior consistent with raster path:
             # never export an empty scene.
             if len(scene.geometry) == 0:
-                return None, None, None, "[ERROR] Vector mesh generation failed: no valid geometry generated"
+                return None, None, None, "[ERROR] Vector mesh generation failed: no valid geometry generated", None
             
             # 2. Export 3MF (unified Bambu metadata path)
             base_name = os.path.splitext(os.path.basename(image_path))[0]
@@ -604,7 +604,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
                 vec_slot_names.append(geom_name)
 
             if not vec_slot_names:
-                return None, None, None, "[ERROR] Vector export aborted: all generated geometries are empty"
+                return None, None, None, "[ERROR] Vector export aborted: all generated geometries are empty", None
             vec_preview_colors = vec_color_conf['preview']
 
             vec_print_settings = {
@@ -746,9 +746,9 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
                     f"total={vector_timing.get('vector_branch_total_s', 0.0):.3f}"
                 )
             
-            # Return results
+            # Return results (Vector mode doesn't generate color recipe)
             msg = f"✅ Vector conversion complete! Objects merged by material."
-            return out_path, glb_path, preview_img, msg
+            return out_path, glb_path, preview_img, msg, None
             
         except Exception as e:
             error_msg = f"❌ Vector processing failed: {e}\n\n"
@@ -759,7 +759,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             error_msg += "• Or switch to 'High-Fidelity' mode for rasterization"
             
             print(f"[CONVERTER] {error_msg}")
-            return None, None, None, error_msg
+            return None, None, None, error_msg, None
     
     # If vector mode selected but file is not SVG, show warning
     if modeling_mode == ModelingMode.VECTOR and not image_path.lower().endswith('.svg'):
@@ -768,7 +768,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             "Your file is not an SVG. Please either:\n"
             "• Upload an SVG file, or\n"
             "• Switch to 'High-Fidelity' or 'Pixel Art' mode"
-        )
+        ), None
     
     # ========== [EXISTING] Raster-based Processing ==========
     # NOTE: CMYW and RYBW share 100% of the processing pipeline.
@@ -800,7 +800,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             smooth_sigma=smooth_sigma
         )
     except Exception as e:
-        return None, None, None, f"[ERROR] Image processing failed: {e}"
+        return None, None, None, f"[ERROR] Image processing failed: {e}", None
     
     matched_rgb = result['matched_rgb']
     material_matrix = result['material_matrix']
@@ -997,7 +997,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             total_layers = full_matrix.shape[0]
             print(f"[CONVERTER] Fallback successful: {full_matrix.shape} (Z×H×W)")
         except Exception as fallback_error:
-            return None, None, None, f"[ERROR] Voxel matrix generation failed: {fallback_error}"
+            return None, None, None, f"[ERROR] Voxel matrix generation failed: {fallback_error}", None
     
     # Step 6: Generate 3D Meshes
     scene = trimesh.Scene()
@@ -1328,7 +1328,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
     # Check if scene has any geometry before exporting (Requirement 8.1)
     if len(scene.geometry) == 0:
         print(f"[CONVERTER] Error: No meshes generated, cannot export 3MF")
-        return None, None, None, "[ERROR] Mesh generation failed: No valid meshes generated"
+        return None, None, None, "[ERROR] Mesh generation failed: No valid meshes generated", None
     
     # BambuStudio print settings
     print_settings = {
@@ -1362,7 +1362,24 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
         print(f"[CONVERTER] 3MF exported with embedded settings: {out_path}")
     except Exception as e:
         print(f"[CONVERTER] Error exporting 3MF: {e}")
-        return None, None, None, f"[ERROR] 3MF export failed: {e}"
+        return None, None, None, f"[ERROR] 3MF export failed: {e}", None
+    
+    # Step 8.5: Generate Color Recipe Report
+    color_recipe_path = None
+    try:
+        from utils.color_recipe_logger import ColorRecipeLogger
+        
+        model_filename = os.path.basename(out_path)
+        color_recipe_path = ColorRecipeLogger.create_from_processor(
+            processor=processor,
+            output_dir=OUTPUT_DIR,
+            model_filename=model_filename,
+            matched_rgb=matched_rgb,
+            material_matrix=material_matrix,
+            mask_solid=mask_solid
+        )
+    except Exception as e:
+        print(f"[CONVERTER] Warning: Failed to generate color recipe report: {e}")
     
     # Step 9: Generate 3D Preview
     preview_mesh = _create_preview_mesh(
@@ -1463,7 +1480,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
     elif glb_path and total_pixels > 500_000:
         msg += " | ℹ️ 3D preview simplified"
     
-    return out_path, glb_path, preview_img, msg
+    return out_path, glb_path, preview_img, msg, color_recipe_path
 
 
 
