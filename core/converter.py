@@ -1417,10 +1417,8 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
         msg += f" | Loop: {slot_names[loop_info['color_id']]}"
     
     total_pixels = target_w * target_h
-    if glb_path is None and total_pixels > 2_000_000:
-        msg += " | ⚠️ Model too large, 3D preview disabled"
-    elif glb_path and total_pixels > 500_000:
-        msg += " | ℹ️ 3D preview simplified"
+    if glb_path and total_pixels > 500_000:
+        msg += " | 3D preview simplified"
     
     return out_path, glb_path, preview_img, msg, color_recipe_path
 
@@ -2127,37 +2125,31 @@ def _create_bed_mesh(bed_w_mm, bed_h_mm, is_dark=True):
 
 
 def _create_preview_mesh(matched_rgb, mask_solid, total_layers, backing_color_id=0, backing_z_range=None, preview_colors=None):
-    """
-    Create simplified 3D preview mesh for browser display.
+    """Create simplified 3D preview mesh for browser display.
+    为浏览器显示创建简化的 3D 预览网格。
 
     Args:
-        matched_rgb: RGB color array
-        mask_solid: Boolean mask of solid pixels
-        total_layers: Total number of Z layers
-        backing_color_id: Backing material ID (0-7), default is 0 (White)
-        backing_z_range: Tuple of (start_z, end_z) for backing layer, or None
-        preview_colors: List of preview colors for materials
+        matched_rgb (np.ndarray): RGB color array of shape (H, W, 3). (RGB 颜色数组)
+        mask_solid (np.ndarray): Boolean mask of solid pixels of shape (H, W). (实心像素布尔掩码)
+        total_layers (int): Total number of Z layers. (Z 轴总层数)
+        backing_color_id (int): Backing material ID (0-7), default is 0 (White). (底板材料 ID)
+        backing_z_range (tuple): Tuple of (start_z, end_z) for backing layer, or None. (底板 Z 范围)
+        preview_colors (list): List of preview colors for materials. (材料预览颜色列表)
 
     Returns:
-        Trimesh object or None if model too large
+        trimesh.Trimesh: Simplified preview mesh, downsampled for large models. (简化预览网格，大模型会降采样)
     """
     height, width = matched_rgb.shape[:2]
     total_pixels = width * height
 
-    DISABLE_THRESHOLD = 2_000_000
     SIMPLIFY_THRESHOLD = 500_000
     TARGET_PIXELS = 300_000
-
-    if total_pixels > DISABLE_THRESHOLD:
-        print(f"[PREVIEW] Model too large ({total_pixels:,} pixels)")
-        print(f"[PREVIEW] 3D preview disabled to prevent crash")
-        return None
 
     if total_pixels > SIMPLIFY_THRESHOLD:
         scale_factor = int(np.sqrt(total_pixels / TARGET_PIXELS))
         scale_factor = max(2, min(scale_factor, 16))
 
-        print(f"[PREVIEW] Downsampling by {scale_factor}×")
+        print(f"[PREVIEW] Downsampling by {scale_factor}x ({total_pixels:,} -> ~{TARGET_PIXELS:,} pixels)")
 
         new_height = height // scale_factor
         new_width = width // scale_factor
