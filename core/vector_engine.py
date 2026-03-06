@@ -118,6 +118,7 @@ class VectorProcessor:
         slot_names = color_conf["slots"]
         preview_colors = color_conf["preview"]
         num_channels = len(slot_names)
+        num_layers = color_conf.get('layer_count', PrinterConfig.COLOR_LAYERS)
 
         # === Stage 4: Match fill colors to LUT recipes ===
         replacement_manager = None
@@ -129,20 +130,31 @@ class VectorProcessor:
                 print(f"[VECTOR] Warning: Failed to load color replacements: {e}")
 
         t0 = time.perf_counter()
-        matched_shapes = self._match_colors(clipped_shapes, replacement_manager, num_channels)
+        matched_shapes = self._match_colors(clipped_shapes, replacement_manager, num_channels, num_layers=num_layers)
         stage_timings["color_match_s"] = time.perf_counter() - t0
         print(f"[VECTOR] Matched {len(matched_shapes)} shapes to LUT recipes")
 
         # === Stage 5: Run-length extrude per channel ===
-        num_layers = PrinterConfig.COLOR_LAYERS
         layer_h = PrinterConfig.LAYER_HEIGHT
         extrude_cache = {}
+        is_5color = "5-Color Extended" in self.color_mode
+        backing_layer_count = max(1, int(round(thickness_mm / layer_h)))
+        backing_height = backing_layer_count * layer_h
 
         t0 = time.perf_counter()
-        meshes_by_slot = self._run_length_extrude(
-            matched_shapes, num_layers, layer_h, num_channels,
-            slot_names, scale_factor, extrude_cache=extrude_cache,
-        )
+        if is_5color:
+            # Face-up: reversed optical layers stacked above the backing
+            meshes_by_slot = self._run_length_extrude(
+                matched_shapes, num_layers, layer_h, num_channels,
+                slot_names, scale_factor, extrude_cache=extrude_cache,
+                face_up=True, optical_z_base=backing_height,
+            )
+            print(f"[VECTOR] 5-Color face-up: {num_layers} optical layers above {backing_height:.2f}mm backing")
+        else:
+            meshes_by_slot = self._run_length_extrude(
+                matched_shapes, num_layers, layer_h, num_channels,
+                slot_names, scale_factor, extrude_cache=extrude_cache,
+            )
         stage_timings["extrude_bottom_s"] = time.perf_counter() - t0
 
         # === Stage 6: Backing layer from silhouette ===
@@ -156,8 +168,10 @@ class VectorProcessor:
             ]
             silhouette = unary_union(all_geoms) if all_geoms else None
 
-        backing_layer_count = max(1, int(round(thickness_mm / layer_h)))
-        backing_z_start = num_layers * layer_h
+        if is_5color:
+            backing_z_start = 0  # face-up: backing at print-bed level
+        else:
+            backing_z_start = num_layers * layer_h
 
         if thickness_mm > 0 and silhouette is not None and not silhouette.is_empty:
             print(f"[VECTOR] Generating backing: {backing_layer_count} layers ({thickness_mm}mm)")
@@ -312,7 +326,7 @@ class VectorProcessor:
 
     # ── Stage 4: Color matching with per-color cache ─────────────────────
 
-    def _match_colors(self, clipped_shapes, replacement_manager, num_channels):
+    def _match_colors(self, clipped_shapes, replacement_manager, num_channels, num_layers=None):
         """Match each shape's fill colour to a LUT recipe.
 
         Identical fill colours share a single KDTree lookup via a cache,
@@ -320,6 +334,8 @@ class VectorProcessor:
 
         Returns a list of dicts: ``{geometry, recipe, color}``.
         """
+        if num_layers is None:
+            num_layers = PrinterConfig.COLOR_LAYERS
         color_cache = {}
         matched = []
 
@@ -346,7 +362,7 @@ class VectorProcessor:
                 stack = self.img_processor.ref_stacks[lut_idx]
                 recipe = [
                     min(int(stack[z]), num_channels - 1)
-                    for z in range(min(PrinterConfig.COLOR_LAYERS, len(stack)))
+                    for z in range(min(num_layers, len(stack)))
                 ]
                 color_cache[rgb] = recipe
 
@@ -388,11 +404,15 @@ class VectorProcessor:
 
     @staticmethod
     def _run_length_extrude(matched_shapes, num_layers, layer_h,
-                            num_channels, slot_names, scale_factor, extrude_cache=None):
+                            num_channels, slot_names, scale_factor,
+                            extrude_cache=None, face_up=False, optical_z_base=0.0):
         """Extrude each shape per channel, merging consecutive same-channel
         layers into single volumes (run-length encoding).
 
-        Mirrors ``ChromaPrint3D::BuildVectorMeshes`` run-merging logic.
+        When *face_up* is True the layer order is reversed so that
+        recipe[N-1] sits at the lowest Z (just above *optical_z_base*)
+        and recipe[0] at the highest Z — matching ``_build_voxel_matrix_faceup``
+        semantics used by the raster path for 5-Color Extended.
         """
         meshes_by_slot = {}
 
@@ -416,8 +436,14 @@ class VectorProcessor:
                     meshes_by_slot[slot_name] = {"meshes": [], "mat_id": ch}
 
                 for run_start, run_end in runs:
-                    z_bot = run_start * layer_h
-                    height = (run_end - run_start + 1) * layer_h
+                    if face_up:
+                        inv_start = (num_layers - 1) - run_end
+                        inv_end = (num_layers - 1) - run_start
+                        z_bot = optical_z_base + inv_start * layer_h
+                        height = (inv_end - inv_start + 1) * layer_h
+                    else:
+                        z_bot = run_start * layer_h
+                        height = (run_end - run_start + 1) * layer_h
                     new_meshes = VectorProcessor._extrude_geometry(
                         geom, height=height, z_offset=z_bot, scale=scale_factor,
                         extrude_cache=extrude_cache,

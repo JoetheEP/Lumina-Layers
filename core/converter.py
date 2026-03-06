@@ -513,9 +513,9 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
     """
     # Input validation
     if image_path is None:
-        return None, None, None, "[ERROR] Please upload an image"
+        return None, None, None, "[ERROR] Please upload an image", None
     if lut_path is None:
-        return None, None, None, "[WARNING] Please select or upload a .npy calibration file!"
+        return None, None, None, "[WARNING] Please select or upload a .npy calibration file!", None
     
     # Handle LUT path (supports string path or Gradio File object)
     if isinstance(lut_path, str):
@@ -523,7 +523,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
     elif hasattr(lut_path, 'name'):
         actual_lut_path = lut_path.name
     else:
-        return None, None, None, "[ERROR] Invalid LUT file format"
+        return None, None, None, "[ERROR] Invalid LUT file format", None
     
     # Handle backing separation: override backing_color_id if separate_backing is True
     # Error handling for checkbox state (Requirement 8.4)
@@ -577,7 +577,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             # Keep vector export behavior consistent with raster path:
             # never export an empty scene.
             if len(scene.geometry) == 0:
-                return None, None, None, "[ERROR] Vector mesh generation failed: no valid geometry generated"
+                return None, None, None, "[ERROR] Vector mesh generation failed: no valid geometry generated", None
             
             # 2. Export 3MF (unified Bambu metadata path)
             base_name = os.path.splitext(os.path.basename(image_path))[0]
@@ -603,7 +603,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
                 vec_slot_names.append(geom_name)
 
             if not vec_slot_names:
-                return None, None, None, "[ERROR] Vector export aborted: all generated geometries are empty"
+                return None, None, None, "[ERROR] Vector export aborted: all generated geometries are empty", None
             vec_preview_colors = vec_color_conf['preview']
 
             vec_print_settings = {
@@ -633,9 +633,8 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
                 settings=vec_print_settings,
                 color_mode=vec_color_mode,
             )
-            vector_timing["export_3mf_s"] = time.perf_counter() - export_t0
-
             print(f"[CONVERTER] Vector 3MF exported with Bambu metadata: {out_path}")
+            vector_timing["export_3mf_s"] = time.perf_counter() - export_t0
             
             # 4. Generate GLB Preview
             glb_path = None
@@ -759,7 +758,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             error_msg += "• Or switch to 'High-Fidelity' mode for rasterization"
             
             print(f"[CONVERTER] {error_msg}")
-            return None, None, None, error_msg
+            return None, None, None, error_msg, None
     
     # If vector mode selected but file is not SVG, show warning
     if modeling_mode == ModelingMode.VECTOR and not image_path.lower().endswith('.svg'):
@@ -768,7 +767,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             "Your file is not an SVG. Please either:\n"
             "• Upload an SVG file, or\n"
             "• Switch to 'High-Fidelity' or 'Pixel Art' mode"
-        )
+        ), None
     
     # ========== [EXISTING] Raster-based Processing ==========
     # NOTE: CMYW and RYBW share 100% of the processing pipeline.
@@ -800,7 +799,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             smooth_sigma=smooth_sigma
         )
     except Exception as e:
-        return None, None, None, f"[ERROR] Image processing failed: {e}"
+        return None, None, None, f"[ERROR] Image processing failed: {e}", None
     
     matched_rgb = result['matched_rgb']
     material_matrix = result['material_matrix']
@@ -893,8 +892,18 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
     # Step 5: Build Voxel Matrix
     # Error handling for backing layer marking (Requirement 8.2)
     try:
+        # ========== 5-Color Extended: force single-sided face-up ==========
+        # Face-up: backing on print bed, viewing surface on top.
+        # Base stacks have air at index 0 so their viewing surface sits 1 Z
+        # below extended stacks, keeping ≤4 materials per Z layer.
+        if "5-Color Extended" in color_mode:
+            print(f"[CONVERTER] 5-Color Extended: forcing single-sided face-up")
+            structure_mode = "单面"
+            full_matrix, backing_metadata = _build_voxel_matrix_faceup(
+                material_matrix, mask_solid, spacer_thick, backing_color_id
+            )
         # ========== Cloisonné (掐丝珐琅) Mode ==========
-        if enable_cloisonne:
+        elif enable_cloisonne:
             print(f"[CONVERTER] 🎨 Cloisonné Mode ENABLED")
             print(f"[CONVERTER] Wire: width={wire_width_mm}mm, height={wire_height_mm}mm")
             
@@ -987,7 +996,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             total_layers = full_matrix.shape[0]
             print(f"[CONVERTER] Fallback successful: {full_matrix.shape} (Z×H×W)")
         except Exception as fallback_error:
-            return None, None, None, f"[ERROR] Voxel matrix generation failed: {fallback_error}"
+            return None, None, None, f"[ERROR] Voxel matrix generation failed: {fallback_error}", None
     
     # Step 6: Generate 3D Meshes
     scene = trimesh.Scene()
@@ -1248,8 +1257,26 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             traceback.print_exc()
     
     # ========== Step 8: Export 3MF ==========
-    # 单面模式需要 X 轴镜像修正，使 3MF 输出与预览/GLB 一致
     is_single_sided = "单面" in structure_mode or "Single" in structure_mode
+    is_5color = "5-Color Extended" in color_mode
+
+    # 5-Color 高保真：体素 Z 与 BambuStudio 显示约定相反，需 Z 翻转使顶面（观看面）朝上
+    if is_5color:
+        max_z = max(
+            g.vertices[:, 2].max()
+            for g in scene.geometry.values()
+            if hasattr(g, "vertices") and len(g.vertices) > 0
+        )
+        z_flip = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, -1, max_z],
+            [0, 0, 0, 1],
+        ])
+        for geom_name in list(scene.geometry.keys()):
+            scene.geometry[geom_name].apply_transform(z_flip)
+
+    # 单面模式：X 轴镜像修正（BambuStudio writer 需要）
     if is_single_sided:
         model_width_mm = target_w * pixel_scale
         mirror_transform = np.array([
@@ -1260,38 +1287,48 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
         ])
         for geom_name in list(scene.geometry.keys()):
             scene.geometry[geom_name].apply_transform(mirror_transform)
-    
+
+    # 5-Color 高保真：单面 X 镜像后左右仍反，再补一次 X 镜像使左右正确
+    if is_5color:
+        model_width_mm = target_w * pixel_scale
+        x_mirror_again = np.array([
+            [-1, 0, 0, model_width_mm],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+        for geom_name in list(scene.geometry.keys()):
+            scene.geometry[geom_name].apply_transform(x_mirror_again)
+
     base_name = os.path.splitext(os.path.basename(image_path))[0]
     out_path = os.path.join(OUTPUT_DIR, generate_model_filename(base_name, modeling_mode, color_mode))
     
     # Check if scene has any geometry before exporting (Requirement 8.1)
     if len(scene.geometry) == 0:
         print(f"[CONVERTER] Error: No meshes generated, cannot export 3MF")
-        return None, None, None, "[ERROR] Mesh generation failed: No valid meshes generated"
+        return None, None, None, "[ERROR] Mesh generation failed: No valid meshes generated", None
+    
+    # BambuStudio print settings
+    print_settings = {
+        'layer_height': '0.08',
+        'initial_layer_height': '0.08',
+        'wall_loops': '1',
+        'top_shell_layers': '0',
+        'bottom_shell_layers': '0',
+        'sparse_infill_density': '100%',
+        'sparse_infill_pattern': 'zig-zag',
+        'nozzle_temperature': ['220'] * 8,
+        'bed_temperature': ['60'] * 8,
+        'filament_type': ['PLA'] * 8,
+        'print_speed': '100',
+        'travel_speed': '150',
+        'enable_support': '0',
+        'brim_width': '5',
+        'brim_type': 'auto_brim',
+    }
     
     try:
-        # Use enhanced BambuStudio-compatible 3MF export
         print(f"[CONVERTER] Exporting with BambuStudio metadata...")
-        
-        # Prepare print settings (matching user's sample file for color layering)
-        print_settings = {
-            'layer_height': '0.08',
-            'initial_layer_height': '0.08',
-            'wall_loops': '1',
-            'top_shell_layers': '0',
-            'bottom_shell_layers': '0',
-            'sparse_infill_density': '100%',
-            'sparse_infill_pattern': 'zig-zag',
-            'nozzle_temperature': ['220'] * 8,  # Support up to 8 extruders
-            'bed_temperature': ['60'] * 8,
-            'filament_type': ['PLA'] * 8,
-            'print_speed': '100',
-            'travel_speed': '150',
-            'enable_support': '0',
-            'brim_width': '5',
-            'brim_type': 'auto_brim',
-        }
-        
         export_scene_with_bambu_metadata(
             scene=scene,
             output_path=out_path,
@@ -1300,11 +1337,10 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
             settings=print_settings,
             color_mode=color_mode
         )
-        
         print(f"[CONVERTER] 3MF exported with embedded settings: {out_path}")
     except Exception as e:
         print(f"[CONVERTER] Error exporting 3MF: {e}")
-        return None, None, None, f"[ERROR] 3MF export failed: {e}"
+        return None, None, None, f"[ERROR] 3MF export failed: {e}", None
     
     # Step 8.5: Generate Color Recipe Report
     color_recipe_path = None
@@ -1330,7 +1366,7 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
         backing_z_range=backing_metadata['backing_z_range'],
         preview_colors=preview_colors
     )
-    
+
     if preview_mesh:
         preview_mesh.apply_transform(transform)
         
@@ -1987,7 +2023,7 @@ def _build_voxel_matrix(material_matrix, mask_solid, spacer_thick, structure_mod
     Build complete voxel matrix with backing layer marked using special material_id.
     
     Args:
-        material_matrix: (H, W, 5) material matrix
+        material_matrix: (H, W, N) material matrix (N optical layers)
         mask_solid: (H, W) solid pixel mask
         spacer_thick: backing thickness (mm)
         structure_mode: "双面" or "单面" (Double-sided or Single-sided)
@@ -2000,7 +2036,9 @@ def _build_voxel_matrix(material_matrix, mask_solid, spacer_thick, structure_mod
                 - 'backing_color_id': int
                 - 'backing_z_range': tuple (start_z, end_z)
     """
-    target_h, target_w = material_matrix.shape[:2]
+    if material_matrix.ndim != 3:
+        raise ValueError(f"material_matrix must be 3D (H, W, N), got shape={material_matrix.shape}")
+    target_h, target_w, optical_layers = material_matrix.shape
     mask_transparent = ~mask_solid
     
     bottom_voxels = np.transpose(material_matrix, (2, 0, 1))
@@ -2009,33 +2047,33 @@ def _build_voxel_matrix(material_matrix, mask_solid, spacer_thick, structure_mod
     
     if "双面" in structure_mode or "Double" in structure_mode:
         top_voxels = np.transpose(material_matrix[..., ::-1], (2, 0, 1))
-        total_layers = 5 + spacer_layers + 5
+        total_layers = optical_layers + spacer_layers + optical_layers
         full_matrix = np.full((total_layers, target_h, target_w), -1, dtype=int)
         
-        full_matrix[0:5] = bottom_voxels
+        full_matrix[0:optical_layers] = bottom_voxels
         
         # Use backing_color_id parameter to mark backing layer
         spacer = np.full((target_h, target_w), -1, dtype=int)
         spacer[~mask_transparent] = backing_color_id
-        for z in range(5, 5 + spacer_layers):
+        for z in range(optical_layers, optical_layers + spacer_layers):
             full_matrix[z] = spacer
         
-        full_matrix[5 + spacer_layers:] = top_voxels
+        full_matrix[optical_layers + spacer_layers:] = top_voxels
         
-        backing_z_range = (5, 5 + spacer_layers - 1)
+        backing_z_range = (optical_layers, optical_layers + spacer_layers - 1)
     else:
-        total_layers = 5 + spacer_layers
+        total_layers = optical_layers + spacer_layers
         full_matrix = np.full((total_layers, target_h, target_w), -1, dtype=int)
         
-        full_matrix[0:5] = bottom_voxels
+        full_matrix[0:optical_layers] = bottom_voxels
         
         # Use backing_color_id parameter to mark backing layer
         spacer = np.full((target_h, target_w), -1, dtype=int)
         spacer[~mask_transparent] = backing_color_id
-        for z in range(5, total_layers):
+        for z in range(optical_layers, total_layers):
             full_matrix[z] = spacer
         
-        backing_z_range = (5, total_layers - 1)
+        backing_z_range = (optical_layers, total_layers - 1)
     
     backing_metadata = {
         'backing_color_id': backing_color_id,
@@ -2043,6 +2081,71 @@ def _build_voxel_matrix(material_matrix, mask_solid, spacer_thick, structure_mod
     }
     
     return full_matrix, backing_metadata
+
+
+def _build_voxel_matrix_6layer(material_matrix, mask_solid, spacer_thick, structure_mode, backing_color_id=0):
+    """
+    Build complete voxel matrix for 6-layer structures (5-Color Extended mode).
+    
+    Args:
+        material_matrix: (H, W, 6) material matrix for 6 layers
+        mask_solid: (H, W) solid pixel mask
+        spacer_thick: backing thickness (mm)
+        structure_mode: "双面" or "单面" (Double-sided or Single-sided)
+        backing_color_id: backing material ID (0-7), default is 0 (White)
+    
+    Returns:
+        tuple: (full_matrix, backing_metadata)
+            - full_matrix: (Z, H, W) voxel matrix
+            - backing_metadata: dict with keys:
+                - 'backing_color_id': int
+                - 'backing_z_range': tuple (start_z, end_z)
+    """
+    return _build_voxel_matrix(
+        material_matrix, mask_solid, spacer_thick, structure_mode, backing_color_id=backing_color_id
+    )
+
+
+def _build_voxel_matrix_faceup(material_matrix, mask_solid, spacer_thick, backing_color_id=0):
+    """
+    Face-up voxel matrix for 5-Color Extended mode.
+
+    Orientation: backing at the bottom (print-bed side), viewing surface at the
+    top.  The model is printed right-side-up — no post-print flipping required.
+
+    material_matrix convention (top-to-bottom):
+        index 0 = viewing surface (outermost)
+        index N-1 = near backing (innermost)
+
+    For base 1024 stacks, index 0 = -1 (air padding) so their viewing surface
+    sits 1 Z below the extended stacks, keeping each Z ≤ 4 materials.
+
+    Layer structure (bottom → top, Z ascending):
+        Z = 0 .. spacer-1  : Solid backing (backing_color_id)
+        Z = spacer .. +5   : Optical layers (reversed: index N-1 → lowest Z,
+                             index 0 → highest Z)
+        -1 values stay as air in the voxel matrix.
+    """
+    target_h, target_w, optical_layers = material_matrix.shape
+    spacer_layers = max(1, int(round(spacer_thick / PrinterConfig.LAYER_HEIGHT)))
+    total_layers = spacer_layers + optical_layers
+    full_matrix = np.full((total_layers, target_h, target_w), -1, dtype=int)
+
+    # Backing: solid block at the bottom
+    spacer = np.where(mask_solid, backing_color_id, -1).astype(int)
+    full_matrix[:spacer_layers] = spacer[np.newaxis, :, :]
+
+    # Optical: reversed order so index 0 (viewing surface) → highest Z
+    for i in range(optical_layers):
+        layer = material_matrix[:, :, optical_layers - 1 - i]
+        z = spacer_layers + i
+        full_matrix[z] = np.where(mask_solid, layer, -1)
+
+    backing_z_range = (0, spacer_layers - 1)
+    return full_matrix, {
+        'backing_color_id': backing_color_id,
+        'backing_z_range': backing_z_range,
+    }
 
 
 def _create_bed_mesh(bed_w_mm, bed_h_mm, is_dark=True):
@@ -2361,7 +2464,7 @@ def generate_realtime_glb(cache):
         transform[1, 1] = pixel_scale
         transform[2, 2] = PrinterConfig.LAYER_HEIGHT
         preview_mesh.apply_transform(transform)
-        
+
         # Add bed platform
         model_w_mm = target_w * pixel_scale
         model_h_mm = target_h * pixel_scale
@@ -2482,6 +2585,7 @@ def generate_preview_cached(image_path, lut_path, target_width_mm,
         'matched_rgb': matched_rgb,
         'preview_rgba': preview_rgba.copy(),
         'color_conf': color_conf,
+        'color_mode': color_mode,
         'quantize_colors': quantize_colors,
         'backing_color_id': backing_color_id,
         'is_dark': is_dark,
@@ -3596,8 +3700,29 @@ def detect_lut_color_mode(lut_path):
         return None
     
     try:
-        # .npz 格式直接识别为合并模式
         if lut_path.endswith('.npz'):
+            data = np.load(lut_path)
+            if 'rgb' in data:
+                rgb = data['rgb']
+                total_colors = int(rgb.reshape(-1, 3).shape[0])
+                stacks = data['stacks'] if 'stacks' in data else None
+                layer_count = int(stacks.shape[1]) if isinstance(stacks, np.ndarray) and stacks.ndim == 2 else None
+                max_mat = int(np.max(stacks)) if isinstance(stacks, np.ndarray) and stacks.size > 0 else None
+                if total_colors >= 2400 and total_colors < 2600 and layer_count == 6 and (max_mat is None or max_mat <= 4):
+                    print(f"[AUTO_DETECT] Detected 5-Color Extended mode from .npz ({total_colors} colors)")
+                    return "5-Color Extended"
+                if total_colors >= 2600 and total_colors <= 2800:
+                    print(f"[AUTO_DETECT] Detected 8-Color mode from .npz ({total_colors} colors)")
+                    return "8-Color Max"
+                if total_colors >= 1200 and total_colors < 1400:
+                    print(f"[AUTO_DETECT] Detected 6-Color mode from .npz ({total_colors} colors)")
+                    return "6-Color (Smart 1296)"
+                if total_colors >= 900 and total_colors < 1200:
+                    print(f"[AUTO_DETECT] Detected 4-Color mode from .npz ({total_colors} colors)")
+                    return "4-Color"
+                if total_colors >= 30 and total_colors <= 35:
+                    print(f"[AUTO_DETECT] Detected 2-Color BW mode from .npz ({total_colors} colors)")
+                    return "BW (Black & White)"
             print(f"[AUTO_DETECT] Detected Merged LUT (.npz format)")
             return "Merged"
         
@@ -3625,6 +3750,11 @@ def detect_lut_color_mode(lut_path):
         if total_colors >= 30 and total_colors <= 35:
             print(f"[AUTO_DETECT] Detected 2-Color BW mode (32 colors)")
             return "BW (Black & White)"
+        
+        # 5-Color Extended模式：~2468色 (1024 base + 1444 extended)
+        elif total_colors >= 2400 and total_colors < 2600:
+            print(f"[AUTO_DETECT] Detected 5-Color Extended mode ({total_colors} colors)")
+            return "5-Color Extended"
         
         # 8色模式：2600-2800色
         elif total_colors >= 2600 and total_colors <= 2800:

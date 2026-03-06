@@ -632,3 +632,58 @@ def export_scene_with_bambu_metadata(scene: trimesh.Scene, output_path: str,
         )
     
     return writer.export()
+
+
+def inject_bambu_metadata(filepath: str, settings: Optional[Dict],
+                          slot_names: List[str], preview_colors: Dict,
+                          color_mode: str = '4-Color'):
+    """
+    Inject BambuStudio metadata into an existing 3MF file (exported by trimesh).
+
+    Opens the 3MF ZIP, adds Metadata/ files (print settings, filament config,
+    model settings, etc.), and re-saves. The original geometry is untouched.
+    """
+    import json as _json
+    from config import ColorSystem
+
+    # Create a temporary writer to reuse metadata generation logic
+    writer = BambuStudio3MFWriter(filepath, settings, color_mode)
+
+    # Build a dummy objects list so filament arrays have correct length
+    color_conf = ColorSystem.get(color_mode)
+    full_slot_names = color_conf.get('slots', [])
+    for slot_name in slot_names:
+        color_rgb = (200, 200, 200)
+        for mat_id, full_name in enumerate(full_slot_names):
+            if slot_name == full_name or slot_name in full_name or full_name in slot_name:
+                if mat_id in preview_colors:
+                    color_rgb = tuple(preview_colors[mat_id][:3])
+                    break
+        writer.objects.append((None, slot_name, color_rgb))
+
+    # Generate metadata content in a temp dir, then inject into the 3MF ZIP
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.makedirs(os.path.join(tmpdir, 'Metadata'), exist_ok=True)
+        writer._write_metadata_files(tmpdir)
+
+        # Read existing 3MF contents
+        existing_files = {}
+        with zipfile.ZipFile(filepath, 'r') as zf:
+            for name in zf.namelist():
+                existing_files[name] = zf.read(name)
+
+        # Add metadata files
+        for root, _dirs, files in os.walk(os.path.join(tmpdir, 'Metadata')):
+            for fname in files:
+                full_path = os.path.join(root, fname)
+                arcname = 'Metadata/' + fname
+                with open(full_path, 'rb') as f:
+                    existing_files[arcname] = f.read()
+
+        # Re-write ZIP with original geometry + new metadata
+        with zipfile.ZipFile(filepath, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for name, data in existing_files.items():
+                zf.writestr(name, data)
+
+    print(f"[BAMBU_3MF] Injected BambuStudio metadata into {filepath}")
