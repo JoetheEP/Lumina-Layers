@@ -4137,29 +4137,17 @@ def create_converter_tab_content(lang: str, lang_state=None, theme_state=None) -
                                    free_color_set, enable_coating, coating_height_mm,
                                    radio_height_mode: str,
                                    preview_cache, theme_is_dark, progress=gr.Progress()):
-        """Generate 3MF with auto-preview if cache is missing."""
+        """Generate 3MF directly; preview is generated internally by convert_image_to_3d.
         
+        Auto-preview pre-run is intentionally removed: it caused a full duplicate
+        image-processing pass (4-35s) with no cache reuse, since preview_cache was
+        never forwarded into process_batch_generation. Lower-level caches (O-3
+        parse+clip, O-4 SVG raster) already prevent redundant work when the user
+        runs preview before clicking this button.
+        """
         # Resolve UI radio value to backend height_mode parameter
         height_mode = resolve_height_mode(radio_height_mode)
 
-        # Check if preview cache exists
-        if preview_cache is None or not preview_cache:
-            print("[AUTO-PREVIEW] No preview cache found, generating preview first...")
-            progress(0.1, desc="生成预览中... | Generating preview...")
-            
-            # Generate preview first
-            try:
-                preview_img, cache, status, glb = generate_preview_cached_with_fit(
-                    single_image, lut_path, target_width_mm, auto_bg, bg_tol,
-                    color_mode, modeling_mode, quantize_colors, enable_cleanup, theme_is_dark
-                )
-                preview_cache = cache
-                print(f"[AUTO-PREVIEW] Preview generated: {status}")
-            except Exception as e:
-                print(f"[AUTO-PREVIEW] Failed to generate preview: {e}")
-                return None, None, None, f"[ERROR] 预览生成失败: {e}"
-        
-        # Now generate 3MF with the cache
         progress(0.3, desc="生成3MF模型中... | Generating 3MF model...")
         return process_batch_generation(
             batch_files, is_batch, single_image, lut_path, target_width_mm,
