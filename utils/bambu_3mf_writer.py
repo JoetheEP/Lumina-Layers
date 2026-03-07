@@ -225,7 +225,6 @@ class BambuStudio3MFWriter:
             f.write(' </resources>\n')
             f.write(' <build/>\n')
             f.write('</model>\n')
-<<<<<<< HEAD
 
     @staticmethod
     def _write_vertices_stream(stream, vertices):
