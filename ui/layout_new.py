@@ -2037,7 +2037,6 @@ def create_converter_tab_content(lang: str, lang_state=None, theme_state=None) -
                 height=400,
                 visible=True,
                 elem_id="conv-image-input",
-                file_types=SUPPORTED_IMAGE_FILE_TYPES,
             )
             components['file_conv_batch_input'] = gr.File(
                 label=I18n.get('conv_batch_input', lang),
@@ -2123,7 +2122,6 @@ def create_converter_tab_content(lang: str, lang_state=None, theme_state=None) -
                         height=200,
                         sources=["upload"],
                         interactive=True,
-                        file_types=SUPPORTED_IMAGE_FILE_TYPES,
                     )
                     components['image_conv_heightmap_preview'] = gr.Image(
                         label="高度图预览 | Heightmap Preview",
@@ -4660,7 +4658,6 @@ def create_extractor_tab_content(lang: str) -> dict:
                 label=I18n.get('ext_photo', lang),
                 type="numpy",
                 interactive=True,
-                file_types=SUPPORTED_IMAGE_FILE_TYPES,
             )
                 
             with gr.Row():
