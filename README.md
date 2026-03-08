@@ -1,8 +1,55 @@
-# Lumina Studio
+<p align="center">
+  <img src="logo.png" width="128" alt="Lumina Studio Logo">
+</p>
 
-Physics-Based Multi-Material FDM Color System
+<h1 align="center">Lumina Studio</h1>
 
-[📖 中文文档 / Chinese Version](README_CN.md)
+<p align="center">
+  Physics-Based Multi-Material FDM Color System
+</p>
+
+<p align="center">
+  <a href="https://github.com/MOVIBALE/Lumina-Layers/stargazers">
+    <img src="https://img.shields.io/github/stars/MOVIBALE/Lumina-Layers?style=social" alt="Stars">
+  </a>
+  &nbsp;
+  <a href="https://github.com/MOVIBALE/Lumina-Layers/releases/latest">
+    <img src="https://img.shields.io/github/v/release/MOVIBALE/Lumina-Layers?label=Latest%20Release" alt="Release">
+  </a>
+  &nbsp;
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-GPL%20v3.0-blue.svg" alt="License">
+  </a>
+</p>
+
+<p align="center">
+  <a href="README_CN.md">📖 中文文档 / Chinese Version</a>
+</p>
+
+---
+
+<h2 align="center">Official Links & Community</h2>
+
+<p align="center"><b>GitHub Repository:</b></p>
+<p align="center">
+  <a href="https://github.com/MOVIBALE/Lumina-Layers">
+    <img src="https://img.shields.io/badge/GitHub-Lumina--Layers-181717?style=for-the-badge&logo=github" alt="GitHub">
+  </a>
+</p>
+
+<p align="center"><b>Follow us on Bilibili:</b></p>
+<p align="center">
+  <a href="https://b23.tv/CCxxiKC">
+    <img src="https://img.shields.io/badge/Bilibili-Lumina%20Studio-00A1D6?style=for-the-badge&logo=bilibili&logoColor=white" alt="Bilibili">
+  </a>
+</p>
+
+<p align="center"><b>Join our QQ Group:</b></p>
+<p align="center">
+  <a href="https://qm.qq.com/q/vocxOMTnj2">
+    <img src="https://img.shields.io/badge/QQ%20Group-1065401448-EB1923?style=for-the-badge&logo=tencentqq&logoColor=white" alt="QQ Group">
+  </a>
+</p>
 
 ---
 
