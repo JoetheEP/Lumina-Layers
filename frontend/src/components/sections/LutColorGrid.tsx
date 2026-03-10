@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useConverterStore } from "../../stores/converterStore";
 import type { LutColorEntry } from "../../api/types";
-import Accordion from "../ui/Accordion";
 
 export type HueCategory =
   | "all"
@@ -216,7 +215,7 @@ export default function LutColorGrid() {
   };
 
   return (
-    <Accordion title="LUT 颜色网格">
+    <div>
       {lutColorsLoading ? (
         <p className="text-xs text-gray-500 py-2">加载 LUT 颜色中...</p>
       ) : lutColors.length === 0 ? (
@@ -297,6 +296,6 @@ export default function LutColorGrid() {
           </div>
         </div>
       )}
-    </Accordion>
+    </div>
   );
 }

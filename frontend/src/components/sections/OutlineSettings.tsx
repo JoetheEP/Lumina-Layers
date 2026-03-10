@@ -1,6 +1,5 @@
 import { useConverterStore } from "../../stores/converterStore";
 import { ModelingMode } from "../../api/types";
-import Accordion from "../ui/Accordion";
 import Checkbox from "../ui/Checkbox";
 import Slider from "../ui/Slider";
 
@@ -16,10 +15,9 @@ export default function OutlineSettings() {
   const isVector = modeling_mode === ModelingMode.VECTOR;
 
   return (
-    <Accordion title="描边设置">
-      <div className="flex flex-col gap-4">
-        <Checkbox
-          label="启用描边"
+    <div className="flex flex-col gap-4">
+      <Checkbox
+        label="启用描边"
           checked={enable_outline}
           onChange={setEnableOutline}
           disabled={isVector}
@@ -36,7 +34,6 @@ export default function OutlineSettings() {
             onChange={setOutlineWidth}
           />
         )}
-      </div>
-    </Accordion>
+    </div>
   );
 }

@@ -36,7 +36,9 @@ export const SLICER_BRAND_COLORS: Record<string, SlicerBrandStyle> = {
  * @returns The brand style object. (品牌样式对象)
  */
 export function getSlicerBrandStyle(slicerId: string): SlicerBrandStyle {
-  return SLICER_BRAND_COLORS[slicerId] ?? DEFAULT_BRAND_STYLE;
+  return Object.hasOwn(SLICER_BRAND_COLORS, slicerId)
+    ? SLICER_BRAND_COLORS[slicerId]
+    : DEFAULT_BRAND_STYLE;
 }
 
 /**

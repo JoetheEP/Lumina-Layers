@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { useConverterStore } from "../../stores/converterStore";
 import type { AutoHeightMode } from "../../api/types";
-import Accordion from "../ui/Accordion";
 import Checkbox from "../ui/Checkbox";
 import Slider from "../ui/Slider";
 import Dropdown from "../ui/Dropdown";
@@ -52,8 +51,7 @@ export default function ReliefSettings() {
   );
 
   return (
-    <Accordion title="浮雕设置">
-      <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
         <Checkbox
           label="启用浮雕"
           checked={enable_relief}
@@ -96,7 +94,6 @@ export default function ReliefSettings() {
             )}
           </>
         )}
-      </div>
-    </Accordion>
+    </div>
   );
 }

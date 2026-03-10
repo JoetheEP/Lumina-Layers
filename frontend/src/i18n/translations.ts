@@ -1075,4 +1075,88 @@ export const translations: Record<string, Record<"zh" | "en", string>> = {
       "- **K-Means Color Quantization**",
     ].join("\n"),
   },
+
+  // ==================== Widget Titles ====================
+  "widget.converter": {
+    zh: "图像转换",
+    en: "Converter",
+  },
+  "widget.calibration": {
+    zh: "校准板",
+    en: "Calibration",
+  },
+  "widget.extractor": {
+    zh: "颜色提取",
+    en: "Extractor",
+  },
+  "widget.lutManager": {
+    zh: "LUT 管理",
+    en: "LUT Manager",
+  },
+  "widget.fiveColor": {
+    zh: "五色查询",
+    en: "Five-Color",
+  },
+  "widget.basicSettings": {
+    zh: "基础设置",
+    en: "Basic Settings",
+  },
+  "widget.advancedSettings": {
+    zh: "高级设置",
+    en: "Advanced Settings",
+  },
+  "widget.reliefSettings": {
+    zh: "浮雕设置",
+    en: "Relief Settings",
+  },
+  "widget.palettePanel": {
+    zh: "调色板",
+    en: "Palette",
+  },
+  "widget.lutColorGrid": {
+    zh: "LUT 颜色网格",
+    en: "LUT Color Grid",
+  },
+  "widget.outlineSettings": {
+    zh: "轮廓设置",
+    en: "Outline Settings",
+  },
+  "widget.cloisonneSettings": {
+    zh: "景泰蓝设置",
+    en: "Cloisonné Settings",
+  },
+  "widget.coatingSettings": {
+    zh: "涂层设置",
+    en: "Coating Settings",
+  },
+  "widget.keychainLoop": {
+    zh: "挂件环设置",
+    en: "Keychain Loop",
+  },
+  "widget.actionBar": {
+    zh: "操作栏",
+    en: "Actions",
+  },
+
+  // ==================== TAB Navigation Titles ====================
+  "tab.converter": {
+    zh: "图像转换",
+    en: "Converter",
+  },
+  "tab.calibration": {
+    zh: "校准",
+    en: "Calibration",
+  },
+  "tab.extractor": {
+    zh: "提取器",
+    en: "Extractor",
+  },
+  "tab.lutManager": {
+    zh: "LUT 管理",
+    en: "LUT Manager",
+  },
+  "tab.fiveColor": {
+    zh: "五色查询",
+    en: "Five-Color",
+  },
 };

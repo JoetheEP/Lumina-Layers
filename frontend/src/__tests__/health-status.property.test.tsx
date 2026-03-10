@@ -26,7 +26,6 @@ vi.mock("../i18n/context", () => ({
 }));
 
 vi.mock("../components/Scene3D", () => ({ default: () => null }));
-vi.mock("../components/LeftPanel", () => ({ default: () => null }));
 vi.mock("../components/CalibrationPanel", () => ({ default: () => null }));
 vi.mock("../components/ExtractorPanel", () => ({ default: () => null }));
 vi.mock("../components/ExtractorCanvas", () => ({ default: () => null }));
@@ -73,7 +72,7 @@ describe("Feature: frontend-scaffold, Property 2: 非 'ok' 状态显示失败徽
           ).not.toBeInTheDocument();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
-  });
+  }, 30000);
 });

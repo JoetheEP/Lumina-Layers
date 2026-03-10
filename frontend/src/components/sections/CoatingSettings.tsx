@@ -1,5 +1,4 @@
 import { useConverterStore } from "../../stores/converterStore";
-import Accordion from "../ui/Accordion";
 import Checkbox from "../ui/Checkbox";
 import Slider from "../ui/Slider";
 
@@ -12,10 +11,9 @@ export default function CoatingSettings() {
   } = useConverterStore();
 
   return (
-    <Accordion title="涂层设置">
-      <div className="flex flex-col gap-4">
-        <Checkbox
-          label="启用涂层"
+    <div className="flex flex-col gap-4">
+      <Checkbox
+        label="启用涂层"
           checked={enable_coating}
           onChange={setEnableCoating}
         />
@@ -31,7 +29,6 @@ export default function CoatingSettings() {
             onChange={setCoatingHeightMm}
           />
         )}
-      </div>
-    </Accordion>
+    </div>
   );
 }

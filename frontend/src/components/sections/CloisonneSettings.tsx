@@ -1,6 +1,5 @@
 import { useConverterStore } from "../../stores/converterStore";
 import { ModelingMode } from "../../api/types";
-import Accordion from "../ui/Accordion";
 import Checkbox from "../ui/Checkbox";
 import Slider from "../ui/Slider";
 
@@ -18,10 +17,9 @@ export default function CloisonneSettings() {
   const isVector = modeling_mode === ModelingMode.VECTOR;
 
   return (
-    <Accordion title="掐丝珐琅">
-      <div className="flex flex-col gap-4">
-        <Checkbox
-          label="启用掐丝珐琅"
+    <div className="flex flex-col gap-4">
+      <Checkbox
+        label="启用掐丝珐琅"
           checked={enable_cloisonne}
           onChange={setEnableCloisonne}
           disabled={isVector}
@@ -50,7 +48,6 @@ export default function CloisonneSettings() {
             />
           </>
         )}
-      </div>
-    </Accordion>
+    </div>
   );
 }

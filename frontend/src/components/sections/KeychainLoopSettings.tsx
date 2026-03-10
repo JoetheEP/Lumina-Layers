@@ -1,5 +1,4 @@
 import { useConverterStore } from "../../stores/converterStore";
-import Accordion from "../ui/Accordion";
 import Checkbox from "../ui/Checkbox";
 import Slider from "../ui/Slider";
 
@@ -16,10 +15,9 @@ export default function KeychainLoopSettings() {
   } = useConverterStore();
 
   return (
-    <Accordion title="挂件环">
-      <div className="flex flex-col gap-4">
-        <Checkbox
-          label="添加挂件环"
+    <div className="flex flex-col gap-4">
+      <Checkbox
+        label="添加挂件环"
           checked={add_loop}
           onChange={setAddLoop}
         />
@@ -57,7 +55,6 @@ export default function KeychainLoopSettings() {
             />
           </>
         )}
-      </div>
-    </Accordion>
+    </div>
   );
 }

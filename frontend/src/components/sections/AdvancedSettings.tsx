@@ -1,5 +1,4 @@
 import { useConverterStore } from "../../stores/converterStore";
-import Accordion from "../ui/Accordion";
 import Slider from "../ui/Slider";
 import Checkbox from "../ui/Checkbox";
 
@@ -18,9 +17,8 @@ export default function AdvancedSettings() {
   } = useConverterStore();
 
   return (
-    <Accordion title="高级设置">
-      <div className="flex flex-col gap-4">
-        <Slider
+    <div className="flex flex-col gap-4">
+      <Slider
           label="量化颜色数"
           value={quantize_colors}
           min={8}
@@ -55,7 +53,6 @@ export default function AdvancedSettings() {
           checked={separate_backing}
           onChange={setSeparateBacking}
         />
-      </div>
-    </Accordion>
+    </div>
   );
 }

@@ -1,6 +1,5 @@
 import { useConverterStore } from "../../stores/converterStore";
 import type { PaletteEntry } from "../../api/types";
-import Accordion from "../ui/Accordion";
 import Slider from "../ui/Slider";
 import Button from "../ui/Button";
 
@@ -125,7 +124,7 @@ export default function PalettePanel() {
   };
 
   return (
-    <Accordion title="调色板 / 颜色映射">
+    <div>
       {palette.length === 0 ? (
         <p className="text-xs text-gray-500 py-2">
           暂无调色板数据，请先完成预览
@@ -177,6 +176,6 @@ export default function PalettePanel() {
           </div>
         </div>
       )}
-    </Accordion>
+    </div>
   );
 }

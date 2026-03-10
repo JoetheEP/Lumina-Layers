@@ -3,18 +3,14 @@ import type { ReactNode } from "react";
 import apiClient from "./api/client";
 import type { HealthResponse } from "./api/types";
 import Scene3D from "./components/Scene3D";
-import LeftPanel from "./components/LeftPanel";
-import CalibrationPanel from "./components/CalibrationPanel";
-import ExtractorPanel from "./components/ExtractorPanel";
 import ExtractorCanvas from "./components/ExtractorCanvas";
-import LutManagerPanel from "./components/LutManagerPanel";
-import AboutView from "./components/AboutView";
-import FiveColorQueryPanel from "./components/FiveColorQueryPanel";
 import LoadingSpinner from "./components/LoadingSpinner";
-import { useActiveModelUrl } from "./hooks/useActiveModelUrl";
-import { I18nProvider } from "./i18n/context";
+import { I18nProvider, useI18n } from "./i18n/context";
 import { LanguageToggle } from "./components/LanguageToggle";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { WidgetWorkspace } from "./components/widget/WidgetWorkspace";
+import { useWidgetStore, WIDGET_REGISTRY, TAB_WIDGET_MAP } from "./stores/widgetStore";
+import TabNavBar from "./components/widget/TabNavBar";
 
 /* ---------- Error Boundary ---------- */
 
@@ -45,12 +41,54 @@ class SceneErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryStat
   }
 }
 
+/* ---------- Widget Toggle Buttons ---------- */
+
+function WidgetToggles() {
+  const { t } = useI18n();
+  const widgets = useWidgetStore((s) => s.widgets);
+  const toggleVisible = useWidgetStore((s) => s.toggleVisible);
+  const resetLayout = useWidgetStore((s) => s.resetLayout);
+  const activeTab = useWidgetStore((s) => s.activeTab);
+
+  // Filter to only show widgets belonging to the current TAB page
+  const activeWidgetIds = TAB_WIDGET_MAP[activeTab];
+  const filteredRegistry = WIDGET_REGISTRY.filter((c) => activeWidgetIds.includes(c.id));
+
+  return (
+    <div className="flex items-center gap-1">
+      {filteredRegistry.map((config) => (
+        <button
+          key={config.id}
+          data-testid={`widget-toggle-${config.id}`}
+          className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+            widgets[config.id].visible
+              ? "bg-blue-600 text-white"
+              : "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+          }`}
+          onClick={() => toggleVisible(config.id)}
+          title={t(config.titleKey)}
+        >
+          {t(config.titleKey)}
+        </button>
+      ))}
+      <button
+        data-testid="widget-reset-layout"
+        className="px-3 py-1.5 rounded text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+        onClick={resetLayout}
+        title="Reset Layout"
+      >
+        ↺
+      </button>
+    </div>
+  );
+}
+
 /* ---------- App ---------- */
 
 function App() {
   const [connected, setConnected] = useState<boolean | null>(null);
-  const [activeTab, setActiveTab] = useState<"converter" | "calibration" | "extractor" | "lut-manager" | "five-color" | "about">("converter");
-  const modelUrl = useActiveModelUrl(activeTab);
+  const activeTab = useWidgetStore((s) => s.activeTab);
+  const setActiveTab = useWidgetStore((s) => s.setActiveTab);
 
   useEffect(() => {
     apiClient
@@ -61,162 +99,64 @@ function App() {
 
   return (
     <I18nProvider>
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-white flex flex-col">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-        <h1 className="text-xl font-semibold tracking-tight">
-          Lumina Studio 2.0
-        </h1>
+      <div className="h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-white flex flex-col overflow-hidden">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+          <h1 className="text-xl font-semibold tracking-tight">
+            Lumina Studio 2.0
+          </h1>
 
-        <nav className="flex items-center gap-1" role="tablist">
-          <button
-            role="tab"
-            data-testid="tab-converter"
-            aria-current={activeTab === "converter" ? "page" : undefined}
-            aria-selected={activeTab === "converter"}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-              activeTab === "converter"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-            }`}
-            onClick={() => setActiveTab("converter")}
-          >
-            Converter
-          </button>
-          <button
-            role="tab"
-            data-testid="tab-calibration"
-            aria-current={activeTab === "calibration" ? "page" : undefined}
-            aria-selected={activeTab === "calibration"}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-              activeTab === "calibration"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-            }`}
-            onClick={() => setActiveTab("calibration")}
-          >
-            Calibration
-          </button>
-          <button
-            role="tab"
-            data-testid="tab-extractor"
-            aria-current={activeTab === "extractor" ? "page" : undefined}
-            aria-selected={activeTab === "extractor"}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-              activeTab === "extractor"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-            }`}
-            onClick={() => setActiveTab("extractor")}
-          >
-            Extractor
-          </button>
-          <button
-            role="tab"
-            data-testid="tab-lut-manager"
-            aria-current={activeTab === "lut-manager" ? "page" : undefined}
-            aria-selected={activeTab === "lut-manager"}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-              activeTab === "lut-manager"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-            }`}
-            onClick={() => setActiveTab("lut-manager")}
-          >
-            LUT Manager
-          </button>
-          <button
-            role="tab"
-            data-testid="tab-five-color"
-            aria-current={activeTab === "five-color" ? "page" : undefined}
-            aria-selected={activeTab === "five-color"}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-              activeTab === "five-color"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-            }`}
-            onClick={() => setActiveTab("five-color")}
-          >
-            Five-Color
-          </button>
-          <button
-            role="tab"
-            data-testid="tab-about"
-            aria-current={activeTab === "about" ? "page" : undefined}
-            aria-selected={activeTab === "about"}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-              activeTab === "about"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-            }`}
-            onClick={() => setActiveTab("about")}
-          >
-            About
-          </button>
-        </nav>
+          <TabNavBar
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+          />
 
-        <div className="flex items-center gap-2">
-          <LanguageToggle />
-          <ThemeToggle />
-          {connected === null ? (
-            <span className="text-sm text-gray-500 dark:text-gray-400">Checking backend…</span>
-          ) : connected ? (
-            <span
-              data-testid="health-badge-ok"
-              className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm text-green-700 dark:bg-green-900/60 dark:text-green-300"
-            >
-              <span className="h-2 w-2 rounded-full bg-green-400" />
-              Backend Connected
-            </span>
-          ) : (
-            <span
-              data-testid="health-badge-fail"
-              className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-sm text-red-700 dark:bg-red-900/60 dark:text-red-300"
-            >
-              <span className="h-2 w-2 rounded-full bg-red-400" />
-              Backend Unreachable
-            </span>
-          )}
-        </div>
-      </header>
+          <WidgetToggles />
 
-      <main className="flex-1 flex flex-row overflow-hidden">
-        {/* Left panel */}
-        {activeTab === "converter" ? (
-          <LeftPanel />
-        ) : activeTab === "calibration" ? (
-          <CalibrationPanel />
-        ) : activeTab === "lut-manager" ? (
-          <LutManagerPanel />
-        ) : activeTab === "about" ? (
-          <AboutView />
-        ) : activeTab === "five-color" ? (
-          <FiveColorQueryPanel />
-        ) : (
-          <ExtractorPanel />
-        )}
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <ThemeToggle />
+            {connected === null ? (
+              <span className="text-sm text-gray-500 dark:text-gray-400">Checking backend…</span>
+            ) : connected ? (
+              <span
+                data-testid="health-badge-ok"
+                className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm text-green-700 dark:bg-green-900/60 dark:text-green-300"
+              >
+                <span className="h-2 w-2 rounded-full bg-green-400" />
+                Backend Connected
+              </span>
+            ) : (
+              <span
+                data-testid="health-badge-fail"
+                className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-sm text-red-700 dark:bg-red-900/60 dark:text-red-300"
+              >
+                <span className="h-2 w-2 rounded-full bg-red-400" />
+                Backend Unreachable
+              </span>
+            )}
+          </div>
+        </header>
 
-        {/* Right area – hidden when About tab is active */}
-        {activeTab !== "about" && activeTab !== "five-color" && (
-        <section data-testid="canvas-area" className="flex-1 relative">
-          {activeTab === "extractor" ? (
-            <ExtractorCanvas />
-          ) : (
-            <SceneErrorBoundary
-              fallback={
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-950">
-                  <p className="text-red-400 text-sm">3D 场景加载失败</p>
-                </div>
-              }
-            >
-              <Suspense fallback={<LoadingSpinner />}>
-                <Scene3D modelUrl={modelUrl ?? undefined} />
-              </Suspense>
-            </SceneErrorBoundary>
-          )}
-        </section>
-        )}
-      </main>
-    </div>
+        <main className="flex-1 overflow-hidden">
+          <WidgetWorkspace>
+            {activeTab === 'extractor' ? (
+              <ExtractorCanvas />
+            ) : (
+              <SceneErrorBoundary
+                fallback={
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-950">
+                    <p className="text-red-400 text-sm">3D 场景加载失败</p>
+                  </div>
+                }
+              >
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Scene3D />
+                </Suspense>
+              </SceneErrorBoundary>
+            )}
+          </WidgetWorkspace>
+        </main>
+      </div>
     </I18nProvider>
   );
 }
