@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useRef, useCallback } from "react";
-import { useThree } from "@react-three/fiber";
+import { useThree, useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { computeFitDistance } from "./ModelViewer";
@@ -65,7 +65,7 @@ function InteractiveModelViewer({
   // Clone scene once per URL load, apply rotation/centering,
   // and clone each color mesh's material to avoid shared-material mutations.
   // Also separate color_ meshes from non-color children for individual JSX rendering.
-  const { nonColorObject, colorMeshes, modelBounds } = useMemo(() => {
+  const { nonColorObject, colorMeshes, modelBounds, sceneCenter } = useMemo(() => {
     const clone = scene.clone(true);
 
     // Remove any baked-in bed mesh
@@ -170,7 +170,7 @@ function InteractiveModelViewer({
           maxZ: boundsBox.max.z, // thickness direction (toward camera)
         };
 
-    return { nonColorObject: clone, colorMeshes: colorMeshList, modelBounds: bounds };
+    return { nonColorObject: clone, colorMeshes: colorMeshList, modelBounds: bounds, sceneCenter: center };
   }, [scene]);
 
   // Expose model bounds to store for KeychainRing3D positioning
@@ -272,6 +272,9 @@ function InteractiveModelViewer({
 
   // Edge outline LineSegments for selected color regions.
   const outlineObjsRef = useRef<THREE.LineSegments[]>([]);
+  // Normalized arc-length ratios per outline, for flowing RGB animation.
+  // Each entry is an array of [h0, h1] pairs (one per line segment).
+  const outlineArcRef = useRef<Array<Array<[number, number]>>>([]);
   const outlineGroupRef = useRef<THREE.Group>(new THREE.Group());
   outlineGroupRef.current.name = "__outlineGroup";
 
@@ -288,6 +291,7 @@ function InteractiveModelViewer({
       (obj.material as THREE.Material).dispose();
     }
     outlineObjsRef.current = [];
+    outlineArcRef.current = [];
 
     if (groupRef.current && !groupRef.current.children.includes(outlineGroup)) {
       groupRef.current.add(outlineGroup);
@@ -316,17 +320,30 @@ function InteractiveModelViewer({
     }
 
     // Draw contour outline for selected color using backend-computed contours.
-    // Contours are in world coordinates (mm) with origin at bottom-left of image.
-    // The GLB model is centered at origin, so we offset contours by modelBounds.min.
+    // Contours are in raw world coords (mm, origin at bottom-left of image).
+    // The GLB model is centered by subtracting sceneCenter, so apply same offset.
     if (selectedColor && colorContours[selectedColor] && modelBounds) {
       const polygons = colorContours[selectedColor];
       const topZ = modelBounds.maxZ + 0.1;
-      const offsetX = modelBounds.minX;
-      const offsetY = modelBounds.minY;
+      const offsetX = -sceneCenter.x;
+      const offsetY = -sceneCenter.y;
 
       for (const polygon of polygons) {
         if (polygon.length < 3) continue;
         const verts: number[] = [];
+        // Compute cumulative arc length for rainbow hue mapping
+        const cumLen: number[] = [0];
+        for (let i = 0; i < polygon.length; i++) {
+          const [x0, y0] = polygon[i];
+          const [x1, y1] = polygon[(i + 1) % polygon.length];
+          const dx = x1 - x0;
+          const dy = y1 - y0;
+          cumLen.push(cumLen[cumLen.length - 1] + Math.sqrt(dx * dx + dy * dy));
+        }
+        const totalLen = cumLen[cumLen.length - 1] || 1;
+
+        // Store normalized arc-length ratios for animation
+        const arcPairs: Array<[number, number]> = [];
         for (let i = 0; i < polygon.length; i++) {
           const [x0, y0] = polygon[i];
           const [x1, y1] = polygon[(i + 1) % polygon.length];
@@ -334,15 +351,22 @@ function InteractiveModelViewer({
             x0 + offsetX, y0 + offsetY, topZ,
             x1 + offsetX, y1 + offsetY, topZ,
           );
+          arcPairs.push([cumLen[i] / totalLen, cumLen[i + 1] / totalLen]);
         }
 
+        // Initialize color buffer (will be updated each frame by useFrame)
+        const colorArr = new Float32Array(arcPairs.length * 6);
         const lineGeo = new THREE.BufferGeometry();
         lineGeo.setAttribute(
           "position",
           new THREE.Float32BufferAttribute(verts, 3),
         );
+        lineGeo.setAttribute(
+          "color",
+          new THREE.BufferAttribute(colorArr, 3),
+        );
         const lineMat = new THREE.LineBasicMaterial({
-          color: 0x00eeff,
+          vertexColors: true,
           linewidth: 2,
           depthTest: false,
         });
@@ -350,9 +374,41 @@ function InteractiveModelViewer({
         line.renderOrder = 999;
         outlineGroup.add(line);
         outlineObjsRef.current.push(line);
+        outlineArcRef.current.push(arcPairs);
       }
     }
-  }, [colorMeshes, colorRemapMap, colorHeightMap, selectedColor, enableRelief, baseHeight, colorContours, modelBounds]);
+  }, [colorMeshes, colorRemapMap, colorHeightMap, selectedColor, enableRelief, baseHeight, colorContours, modelBounds, sceneCenter]);
+
+  // Flowing RGB animation: shift hue offset each frame for a "light strip" effect.
+  const tmpColorAnim = useRef(new THREE.Color());
+  useFrame(() => {
+    const lines = outlineObjsRef.current;
+    const arcs = outlineArcRef.current;
+    if (lines.length === 0) return;
+
+    // Advance hue offset over time (~0.3 full cycles per second)
+    const time = performance.now() * 0.0003;
+
+    const c = tmpColorAnim.current;
+    for (let li = 0; li < lines.length; li++) {
+      const colorAttr = lines[li].geometry.getAttribute("color") as THREE.BufferAttribute;
+      const arr = colorAttr.array as Float32Array;
+      const pairs = arcs[li];
+      if (!pairs) continue;
+
+      for (let si = 0; si < pairs.length; si++) {
+        const [t0, t1] = pairs[si];
+        const idx = si * 6;
+        // Start vertex
+        c.setHSL((t0 + time) % 1.0, 1.0, 0.55);
+        arr[idx] = c.r; arr[idx + 1] = c.g; arr[idx + 2] = c.b;
+        // End vertex
+        c.setHSL((t1 + time) % 1.0, 1.0, 0.55);
+        arr[idx + 3] = c.r; arr[idx + 4] = c.g; arr[idx + 5] = c.b;
+      }
+      colorAttr.needsUpdate = true;
+    }
+  });
 
   // Cleanup on unmount
   useEffect(() => {

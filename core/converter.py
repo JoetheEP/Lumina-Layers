@@ -2748,16 +2748,18 @@ def generate_segmented_glb(cache: dict, max_meshes: int = 64) -> Optional[str]:
             for cnt in cv_contours:
                 if len(cnt) < 3:
                     continue
-                # Convert pixel coords to world coords (mm)
-                # OpenCV contour: (N, 1, 2) with [x_px, y_px]
-                # World: x_mm = x_px * pixel_scale, y_mm = (height - y_px) * pixel_scale
+                # Convert pixel coords to mesh world coords (mm).
+                # OpenCV contour point (x_px, y_px) is at pixel boundary.
+                # Mesh Y uses: world_y = (height - 1 - y_px), box spans [world_y, world_y+1]
+                # So pixel row y_px top edge = height - y_px in mesh pixel space.
+                # Then multiply by pixel_scale to get mm.
+                # X is straightforward: x_mm = x_px * pixel_scale
                 pts = cnt.squeeze(1).astype(float)  # (N, 2)
                 world_pts: list[list[float]] = []
                 for px, py in pts:
-                    world_pts.append([
-                        float(px * pixel_scale),
-                        float((height - py) * pixel_scale),
-                    ])
+                    x_mm = float(px * pixel_scale)
+                    y_mm = float((height - py) * pixel_scale)
+                    world_pts.append([x_mm, y_mm])
                 color_contour_list.append(world_pts)
 
             if color_contour_list:
