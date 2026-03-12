@@ -266,6 +266,10 @@ class ConvertGenerateRequest(BaseModel):
         None, description="环位置 (x, y)"
     )
     enable_relief: bool = Field(False, description="启用 2.5D 浮雕模式")
+    height_mode: Optional[str] = Field(
+        "color",
+        description="浮雕高度模式: 'color' (按颜色) 或 'heightmap' (按高度图)",
+    )
     color_height_map: Optional[Dict[str, float]] = Field(
         None, description="颜色高度映射 {hex: mm}"
     )

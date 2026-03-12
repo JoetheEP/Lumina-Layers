@@ -94,12 +94,20 @@ class LUTListResponse(BaseModel):
     luts: list[LutInfo]
 
 
+class WorkerPoolStatus(BaseModel):
+    """Worker Pool 状态信息。"""
+
+    healthy: bool
+    max_workers: int
+
+
 class HealthResponse(BaseModel):
-    """健康检查响应。"""
+    """健康检查响应（含 Worker Pool 状态）。"""
 
     status: str
     version: str
     uptime_seconds: float
+    worker_pool: WorkerPoolStatus
 
 
 class ExtractResponse(BaseModel):

@@ -505,8 +505,22 @@ export const useConverterStore = create<ConverterState & ConverterActions>(
       }),
     setColorHeightMap: (map: Record<string, number>) =>
       set({ color_height_map: map }),
-    setHeightmapMaxHeight: (height: number) =>
-      set({ heightmap_max_height: clampValue(height, 0.08, 15.0) }),
+    setHeightmapMaxHeight: (height: number) => {
+      const state = _get();
+      const newMax = clampValue(height, 0.08, 15.0);
+      const oldMax = state.heightmap_max_height;
+      // Proportionally rescale all existing color heights
+      if (oldMax > 0 && Object.keys(state.color_height_map).length > 0) {
+        const ratio = newMax / oldMax;
+        const scaled: Record<string, number> = {};
+        for (const [hex, h] of Object.entries(state.color_height_map)) {
+          scaled[hex] = clampValue(h * ratio, 0.08, newMax);
+        }
+        set({ heightmap_max_height: newMax, color_height_map: scaled });
+      } else {
+        set({ heightmap_max_height: newMax });
+      }
+    },
 
     // --- 描边 ---
     setEnableOutline: (enabled: boolean) => set({ enable_outline: enabled, threemfDiskPath: null, downloadUrl: null }),
@@ -825,6 +839,9 @@ export const useConverterStore = create<ConverterState & ConverterActions>(
           loop_length: state.loop_length,
           loop_hole: state.loop_hole,
           enable_relief: state.enable_relief,
+          height_mode: state.enable_relief
+            ? (state.autoHeightMode === 'use-heightmap' ? 'heightmap' : 'color')
+            : undefined,
           color_height_map: state.enable_relief ? state.color_height_map : undefined,
           heightmap_max_height: state.heightmap_max_height,
           enable_outline: state.enable_outline,

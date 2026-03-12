@@ -29,6 +29,41 @@ function PaletteItem({
   const displayHex = remappedHex ?? entry.matched_hex;
   const isRemapped = !!remappedHex;
 
+  // Compact block mode (no height slider)
+  if (!showHeightSlider) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`颜色 #${entry.matched_hex}，占比 ${entry.percentage.toFixed(1)}%${isRemapped ? `，已替换为 #${remappedHex}` : ""}`}
+        aria-pressed={isSelected}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
+        className={`flex flex-col items-center gap-0.5 rounded px-1 py-1 cursor-pointer transition-colors ${
+          isSelected
+            ? "ring-2 ring-blue-500 bg-gray-700/60"
+            : "hover:bg-gray-700/40"
+        }`}
+        style={{ width: 52 }}
+      >
+        <span
+          className={`inline-block w-6 h-6 rounded border ${isRemapped ? "border-yellow-500" : "border-gray-600"}`}
+          style={{ backgroundColor: `#${displayHex}` }}
+          title={`#${displayHex}`}
+        />
+        <span className="text-[9px] text-gray-400 tabular-nums leading-none">
+          {entry.percentage.toFixed(1)}%
+        </span>
+      </div>
+    );
+  }
+
+  // Vertical compact block with height slider (relief mode, 3-col grid)
   return (
     <div
       role="button"
@@ -42,59 +77,38 @@ function PaletteItem({
           onSelect();
         }
       }}
-      className={`flex flex-col gap-2 rounded-md px-3 py-2 cursor-pointer transition-colors ${
+      className={`flex flex-col gap-1 rounded-md px-2 py-1.5 cursor-pointer transition-colors ${
         isSelected
           ? "ring-2 ring-blue-500 bg-gray-700/60"
           : "hover:bg-gray-700/40"
       }`}
     >
-      <div className="flex items-center gap-3">
-        {/* Dual color swatches */}
-        <div className="flex items-center gap-1 shrink-0">
-          <span
-            className="inline-block w-5 h-5 rounded border border-gray-600"
-            style={{ backgroundColor: `#${entry.quantized_hex}` }}
-            title={`原色 #${entry.quantized_hex}`}
-          />
-          <span className="text-gray-500 text-xs">→</span>
-          <span
-            className={`inline-block w-5 h-5 rounded border ${isRemapped ? "border-yellow-500" : "border-gray-600"}`}
-            style={{ backgroundColor: `#${displayHex}` }}
-            title={isRemapped ? `替换色 #${remappedHex}` : `匹配色 #${entry.matched_hex}`}
-          />
-        </div>
-
-        {/* Hex label + percentage */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="text-xs text-gray-300 font-mono truncate">
-            #{displayHex}
-          </span>
-          {isRemapped && (
-            <span className="text-[10px] text-yellow-400 shrink-0">已替换</span>
-          )}
-        </div>
-        <span className="text-xs text-gray-400 tabular-nums shrink-0">
+      {/* Top row: swatch + percentage */}
+      <div className="flex items-center gap-1.5">
+        <span
+          className={`inline-block w-5 h-5 rounded border shrink-0 ${isRemapped ? "border-yellow-500" : "border-gray-600"}`}
+          style={{ backgroundColor: `#${displayHex}` }}
+          title={`#${displayHex}`}
+        />
+        <span className="text-[10px] text-gray-400 tabular-nums truncate">
           {entry.percentage.toFixed(1)}%
         </span>
       </div>
-
-      {/* Height slider (relief mode only) */}
-      {showHeightSlider && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <Slider
-            label="深度"
-            value={heightMm ?? maxHeight * 0.5}
-            min={0.08}
-            max={maxHeight}
-            step={0.04}
-            unit="mm"
-            onChange={onHeightChange}
-          />
-        </div>
-      )}
+      {/* Height slider */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <Slider
+          label=""
+          value={heightMm ?? maxHeight * 0.5}
+          min={0.08}
+          max={maxHeight}
+          step={0.04}
+          unit="mm"
+          onChange={onHeightChange}
+        />
+      </div>
     </div>
   );
 }
@@ -198,23 +212,31 @@ export default function PalettePanel() {
 
           {/* Palette items */}
           <div
-            className="flex flex-col gap-1 max-h-80 overflow-y-auto"
+            className="max-h-80 overflow-y-auto"
             role="listbox"
             aria-label="调色板颜色列表"
           >
-            {palette.map((entry) => (
-              <PaletteItem
-                key={entry.matched_hex}
-                entry={entry}
-                isSelected={selectedColor === entry.matched_hex}
-                remappedHex={colorRemapMap[entry.matched_hex]}
-                heightMm={color_height_map[entry.matched_hex]}
-                showHeightSlider={enable_relief}
-                maxHeight={heightmap_max_height}
-                onSelect={() => handleSelect(entry.matched_hex)}
-                onHeightChange={(h) => updateColorHeight(entry.matched_hex, h)}
-              />
-            ))}
+            <div
+              className={
+                enable_relief
+                  ? "grid grid-cols-3 gap-1"
+                  : "flex flex-wrap gap-1"
+              }
+            >
+              {palette.map((entry) => (
+                <PaletteItem
+                  key={entry.matched_hex}
+                  entry={entry}
+                  isSelected={selectedColor === entry.matched_hex}
+                  remappedHex={colorRemapMap[entry.matched_hex]}
+                  heightMm={color_height_map[entry.matched_hex]}
+                  showHeightSlider={enable_relief}
+                  maxHeight={heightmap_max_height}
+                  onSelect={() => handleSelect(entry.matched_hex)}
+                  onHeightChange={(h) => updateColorHeight(entry.matched_hex, h)}
+                />
+              ))}
+            </div>
           </div>
         </div>
       )}

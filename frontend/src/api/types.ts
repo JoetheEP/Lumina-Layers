@@ -48,6 +48,7 @@ export interface ConvertGenerateRequest extends ConvertPreviewRequest {
   loop_hole: number;
   loop_pos?: [number, number];
   enable_relief: boolean;
+  height_mode?: string;
   color_height_map?: Record<string, number>;
   heightmap_max_height: number;
   enable_outline: boolean;

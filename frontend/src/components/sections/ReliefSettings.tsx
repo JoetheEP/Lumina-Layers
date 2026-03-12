@@ -75,7 +75,7 @@ export default function ReliefSettings() {
               value={heightmap_max_height}
               min={0.08}
               max={15.0}
-              step={0.1}
+              step={0.04}
               unit="mm"
               onChange={setHeightmapMaxHeight}
             />
