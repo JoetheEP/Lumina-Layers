@@ -39,7 +39,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   language: "zh",
   theme: "light",
   lastLutName: "",
-  lastColorMode: "4-Color",
+  lastColorMode: "4-Color (RYBW)",
   lastModelingMode: "high-fidelity",
   lastBedLabel: "256×256 mm",
   cropEnabled: true,

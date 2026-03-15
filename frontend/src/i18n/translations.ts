@@ -72,8 +72,8 @@ export const translations: Record<string, Record<"zh" | "en", string>> = {
     en: "#### 📁 Input",
   },
   conv_lut_title: {
-    zh: "**校准数据 (.npy)**",
-    en: "**Calibration Data (.npy)**",
+    zh: "**校准数据**",
+    en: "**Calibration Data**",
   },
   conv_lut_dropdown: {
     zh: "选择预设",
@@ -84,8 +84,8 @@ export const translations: Record<string, Record<"zh" | "en", string>> = {
     en: "Select from library",
   },
   conv_lut_status_default: {
-    zh: "💡 拖放.npy文件自动添加",
-    en: "💡 Drop .npy to add",
+    zh: "💡 拖放 .npy / .json / .npz 文件自动添加",
+    en: "💡 Drop .npy / .json / .npz to add",
   },
   conv_lut_status_selected: {
     zh: "✅ 已选择",
@@ -612,8 +612,8 @@ export const translations: Record<string, Record<"zh" | "en", string>> = {
     en: "❌ Please upload an image",
   },
   msg_no_lut: {
-    zh: "⚠️ 请选择或上传 .npy 校准文件！",
-    en: "⚠️ Please upload a .npy calibration file!",
+    zh: "⚠️ 请选择或上传校准文件！",
+    en: "⚠️ Please select or upload a calibration file!",
   },
   msg_preview_success: {
     zh: "✅ 预览",
@@ -1460,12 +1460,24 @@ export const translations: Record<string, Record<"zh" | "en", string>> = {
     en: "Not extracted",
   },
   ext_download_lut: {
-    zh: "下载 LUT 文件 (.npy)",
-    en: "Download LUT File (.npy)",
+    zh: "下载 LUT 文件 (.json)",
+    en: "Download LUT File (.json)",
   },
   ext_manual_fix_hint: {
     zh: "点击右侧 LUT 预览图中的色块可手动修正颜色",
     en: "Click a cell in the LUT preview to manually fix its color",
+  },
+  ext_palette_title: {
+    zh: "调色板确认",
+    en: "Palette Confirmation",
+  },
+  ext_confirm_palette_btn: {
+    zh: "确认调色板",
+    en: "Confirm Palette",
+  },
+  ext_palette_confirmed: {
+    zh: "✓ 调色板已确认",
+    en: "✓ Palette confirmed",
   },
 
   // ==================== Extractor Canvas ====================
@@ -1530,6 +1542,18 @@ export const translations: Record<string, Record<"zh" | "en", string>> = {
   basic_lut_placeholder: {
     zh: "选择 LUT...",
     en: "Select LUT...",
+  },
+  basic_lut_upload: {
+    zh: "上传",
+    en: "Upload",
+  },
+  basic_lut_upload_success: {
+    zh: "LUT 上传成功",
+    en: "LUT uploaded",
+  },
+  basic_lut_upload_error: {
+    zh: "LUT 上传失败",
+    en: "LUT upload failed",
   },
   basic_color_mode_label: {
     zh: "色彩模式",

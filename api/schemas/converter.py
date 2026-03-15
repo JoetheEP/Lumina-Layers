@@ -25,8 +25,10 @@ class ColorMode(str, Enum):
     Attributes:
         BW: Black & White grayscale mode (32 levels).
             黑白灰度模式 (32 级)。
-        FOUR_COLOR: 4-Color CMYW/RYBW mode (1024 colors).
-            4 色 CMYW/RYBW 模式 (1024 色)。
+        FOUR_COLOR_CMYW: 4-Color CMYW mode (1024 colors).
+            4 色 CMYW 模式 (1024 色)。
+        FOUR_COLOR_RYBW: 4-Color RYBW mode (1024 colors).
+            4 色 RYBW 模式 (1024 色)。
         SIX_COLOR: 6-Color extended smart mode (1296 colors).
             6 色扩展智能模式 (1296 色)。
         EIGHT_COLOR: 8-Color professional mode (2738 colors).
@@ -36,8 +38,10 @@ class ColorMode(str, Enum):
     """
 
     BW = "BW (Black & White)"
-    FOUR_COLOR = "4-Color"
+    FOUR_COLOR_CMYW = "4-Color (CMYW)"
+    FOUR_COLOR_RYBW = "4-Color (RYBW)"
     SIX_COLOR = "6-Color (Smart 1296)"
+    SIX_COLOR_RYBW = "6-Color (RYBW 1296)"
     EIGHT_COLOR = "8-Color Max"
     MERGED = "Merged"
 
@@ -153,7 +157,7 @@ class ConvertPreviewRequest(BaseModel):
     auto_bg: bool = Field(False, description="自动去背景")
     bg_tol: int = Field(40, ge=0, le=150, description="背景容差")
     color_mode: ColorMode = Field(
-        ColorMode.FOUR_COLOR, description="颜色模式"
+        ColorMode.FOUR_COLOR_RYBW, description="颜色模式"
     )
     modeling_mode: ModelingMode = Field(
         ModelingMode.HIGH_FIDELITY, description="建模模式"
@@ -246,7 +250,7 @@ class ConvertGenerateRequest(BaseModel):
     auto_bg: bool = Field(False, description="自动去背景")
     bg_tol: int = Field(40, ge=0, le=150, description="背景容差")
     color_mode: ColorMode = Field(
-        ColorMode.FOUR_COLOR, description="颜色模式"
+        ColorMode.FOUR_COLOR_RYBW, description="颜色模式"
     )
     modeling_mode: ModelingMode = Field(
         ModelingMode.HIGH_FIDELITY, description="建模模式"

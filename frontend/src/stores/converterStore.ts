@@ -375,7 +375,7 @@ const DEFAULT_STATE: ConverterState = {
   target_height_mm: 60,
   spacer_thick: 1.2,
   structure_mode: StructureModeEnum.DOUBLE_SIDED,
-  color_mode: ColorModeEnum.FOUR_COLOR,
+  color_mode: ColorModeEnum.FOUR_COLOR_RYBW,
   modeling_mode: ModelingModeEnum.HIGH_FIDELITY,
   auto_bg: false,
   bg_tol: 40,

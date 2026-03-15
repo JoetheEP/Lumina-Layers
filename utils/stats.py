@@ -105,7 +105,7 @@ class Stats:
         """
         success_count = 0
         failed_items = []
-        preserve_files = {"lumina_stats.txt", "lumina_lut.npy"}
+        preserve_files = {"lumina_stats.txt", "lumina_lut.json"}
 
         if os.path.exists(OUTPUT_DIR):
             try:
@@ -136,7 +136,7 @@ class Stats:
             int: Total size in bytes
         """
         total_size = 0
-        preserve_files = {"lumina_stats.txt", "lumina_lut.npy"}
+        preserve_files = {"lumina_stats.txt", "lumina_lut.json"}
 
         if os.path.exists(OUTPUT_DIR):
             try:

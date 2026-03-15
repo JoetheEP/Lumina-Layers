@@ -94,7 +94,7 @@ if hasattr(I18n, 'TEXTS'):
         'conv_batch_mode':      {'zh': '📦 批量模式', 'en': '📦 Batch Mode'},
         'conv_batch_mode_info': {'zh': '一次生成多个模型 (参数共享)', 'en': 'Generate multiple models (Shared Settings)'},
         'conv_batch_input':     {'zh': '📤 批量上传图片', 'en': '📤 Batch Upload Images'},
-        'conv_lut_status': {'zh': '💡 拖放.npy文件自动添加', 'en': '💡 Drop .npy file to load'},
+        'conv_lut_status': {'zh': '💡 拖放 .npy/.json/.npz 文件自动添加', 'en': '💡 Drop .npy/.json/.npz file to load'},
     })
 
 DEBOUNCE_JS = """
@@ -1766,9 +1766,11 @@ def _get_all_component_updates(lang: str, components: dict) -> list:
             if choice_key == 'conv_color_mode' or choice_key == 'cal_color_mode' or choice_key == 'ext_color_mode':
                 choices = [
                     ("BW (Black & White)", "BW (Black & White)"),
-                    ("4-Color (1024 colors)", "4-Color"),
+                    ("4-Color CMYW (1024)", "4-Color (CMYW)"),
+                    ("4-Color RYBW (1024)", "4-Color (RYBW)"),
                     ("5-Color Extended (2468)", "5-Color Extended"),
-                    ("6-Color (Smart 1296)", "6-Color (Smart 1296)"),
+                    ("6-Color CMYK (Smart 1296)", "6-Color (Smart 1296)"),
+                    ("6-Color RYBW (1296)", "6-Color (RYBW 1296)"),
                     ("8-Color Max", "8-Color Max"),
                 ]
                 # Only the converter tab needs the Merged option
@@ -1903,17 +1905,20 @@ def get_extractor_reference_image(mode_str, page_choice="Page 1"):
         filename = "ref_5color_ext_page2.png" if is_page2 else "ref_5color_ext_page1.png"
         gen_mode = "5-Color Extended"
         gen_page_idx = 1 if is_page2 else 0
+    elif "6-Color" in mode_str and "RYBW" in mode_str:
+        filename = "ref_6color_rybw.png"
+        gen_mode = "6-Color-RYBW"
     elif "6-Color" in mode_str or "1296" in mode_str:
         filename = "ref_6color_smart.png"
         gen_mode = "6-Color"
-    elif "4-Color" in mode_str:
-        # Unified 4-Color mode defaults to RYBW
-        filename = "ref_rybw_standard.png"
-        gen_mode = "RYBW"
     elif "CMYW" in mode_str:
         filename = "ref_cmyw_standard.png"
         gen_mode = "CMYW"
     elif "RYBW" in mode_str:
+        filename = "ref_rybw_standard.png"
+        gen_mode = "RYBW"
+    elif "4-Color" in mode_str:
+        # Legacy fallback: default to RYBW
         filename = "ref_rybw_standard.png"
         gen_mode = "RYBW"
     elif mode_str == "BW (Black & White)" or mode_str == "BW":
@@ -1958,6 +1963,9 @@ def get_extractor_reference_image(mode_str, page_choice="Page 1"):
         elif gen_mode == "6-Color":
             from core.calibration import generate_smart_board
             _, img, _ = generate_smart_board(block_size, gap)
+        elif gen_mode == "6-Color-RYBW":
+            from core.calibration import generate_smart_board_rybw
+            _, img, _ = generate_smart_board_rybw(block_size, gap)
         elif gen_mode == "BW":
             from core.calibration import generate_bw_calibration_board
             _, img, _ = generate_bw_calibration_board(block_size, gap, backing)
@@ -2009,7 +2017,12 @@ def create_converter_tab_content(lang: str, lang_state=None, theme_state=None) -
 
             # Load saved preferences
             _user_prefs = _load_user_settings()
-            saved_color_mode = _user_prefs.get("last_color_mode", "4-Color")
+            saved_color_mode = _user_prefs.get("last_color_mode", "4-Color (RYBW)")
+            # Legacy compatibility: map old mode strings to new variants
+            if saved_color_mode == "4-Color":
+                saved_color_mode = "4-Color (RYBW)"
+            elif saved_color_mode == "6-Color":
+                saved_color_mode = "6-Color (Smart 1296)"
             saved_modeling_mode_str = _user_prefs.get("last_modeling_mode", ModelingMode.HIGH_FIDELITY.value)
             try:
                 saved_modeling_mode = ModelingMode(saved_modeling_mode_str)
@@ -2019,7 +2032,7 @@ def create_converter_tab_content(lang: str, lang_state=None, theme_state=None) -
             with gr.Row():
                 components['dropdown_conv_lut_dropdown'] = gr.Dropdown(
                     choices=current_choices,
-                    label="校准数据 (.npy) / Calibration Data",
+                    label="校准数据 / Calibration Data",
                     value=default_lut_value,
                     interactive=True,
                     scale=2
@@ -2027,7 +2040,7 @@ def create_converter_tab_content(lang: str, lang_state=None, theme_state=None) -
                 conv_lut_upload = gr.File(
                     label="",
                     show_label=False,
-                    file_types=['.npy'],
+                    file_types=['.npy', '.json', '.npz'],
                     height=84,
                     min_width=100,
                     scale=1,
@@ -2204,9 +2217,11 @@ def create_converter_tab_content(lang: str, lang_state=None, theme_state=None) -
                 components['radio_conv_color_mode'] = gr.Radio(
                     choices=[
                         ("BW (Black & White)", "BW (Black & White)"),
-                        ("4-Color (1024 colors)", "4-Color"),
+                        ("4-Color CMYW (1024)", "4-Color (CMYW)"),
+                        ("4-Color RYBW (1024)", "4-Color (RYBW)"),
                         ("5-Color Extended (2468)", "5-Color Extended"),
-                        ("6-Color (Smart 1296)", "6-Color (Smart 1296)"),
+                        ("6-Color CMYK (Smart 1296)", "6-Color (Smart 1296)"),
+                        ("6-Color RYBW (1296)", "6-Color (RYBW 1296)"),
                         ("8-Color Max", "8-Color Max"),
                         ("🔀 Merged", "Merged"),
                     ],
@@ -4698,12 +4713,14 @@ def create_calibration_tab_content(lang: str) -> dict:
             components['radio_cal_color_mode'] = gr.Radio(
                 choices=[
                     ("BW (Black & White)", "BW (Black & White)"),
-                    ("4-Color (1024 colors)", "4-Color"),
+                    ("4-Color CMYW (1024)", "4-Color (CMYW)"),
+                    ("4-Color RYBW (1024)", "4-Color (RYBW)"),
                     ("5-Color Extended (Dual Page)", "5-Color Extended (Dual Page)"),
-                    ("6-Color (Smart 1296)", "6-Color (Smart 1296)"),
+                    ("6-Color CMYK (Smart 1296)", "6-Color (Smart 1296)"),
+                    ("6-Color RYBW (1296)", "6-Color (RYBW 1296)"),
                     ("8-Color Max", "8-Color Max")
                 ],
-                value="4-Color",
+                value="4-Color (RYBW)",
                 label=I18n.get('cal_color_mode', lang)
             )
                 
@@ -4757,17 +4774,24 @@ def create_calibration_tab_content(lang: str) -> dict:
         if "5-Color Extended" in color_mode:
             from core.calibration import generate_5color_extended_board
             return generate_5color_extended_board(block_size, gap)
+        if color_mode == "6-Color (RYBW 1296)":
+            from core.calibration import generate_smart_board_rybw
+            return generate_smart_board_rybw(block_size, gap)
         if "6-Color" in color_mode:
-            # Call Smart 1296 generator
+            # Call Smart 1296 CMYK generator
             return generate_smart_board(block_size, gap)
         if color_mode == "BW (Black & White)":
             # Call BW generator (exact match to avoid matching RYBW)
             from core.calibration import generate_bw_calibration_board
             return generate_bw_calibration_board(block_size, gap, backing)
         else:
-            # Call traditional 4-color generator (unified for all 4-color modes)
-            # Default to RYBW palette
-            return generate_calibration_board("RYBW", block_size, gap, backing)
+            # Call traditional 4-color generator
+            # Determine CMYW or RYBW from mode string
+            if "CMYW" in color_mode:
+                gen_mode = "CMYW"
+            else:
+                gen_mode = "RYBW"
+            return generate_calibration_board(gen_mode, block_size, gap, backing)
     
     cal_event = components['btn_cal_generate_btn'].click(
             generate_board_wrapper,
@@ -4795,7 +4819,7 @@ def create_extractor_tab_content(lang: str) -> dict:
     ext_state_img = gr.State(None)
     ext_state_pts = gr.State([])
     ext_curr_coord = gr.State(None)
-    default_mode = "4-Color"
+    default_mode = "4-Color (RYBW)"
     ref_img = get_extractor_reference_image(default_mode)
 
     with gr.Row():
@@ -4807,12 +4831,14 @@ def create_extractor_tab_content(lang: str) -> dict:
             components['radio_ext_color_mode'] = gr.Radio(
                 choices=[
                     ("BW (Black & White)", "BW (Black & White)"),
-                    ("4-Color (1024 colors)", "4-Color"),
+                    ("4-Color CMYW (1024)", "4-Color (CMYW)"),
+                    ("4-Color RYBW (1024)", "4-Color (RYBW)"),
                     ("5-Color Extended (2468)", "5-Color Extended"),
-                    ("6-Color (Smart 1296)", "6-Color (Smart 1296)"),
+                    ("6-Color CMYK (Smart 1296)", "6-Color (Smart 1296)"),
+                    ("6-Color RYBW (1296)", "6-Color (RYBW 1296)"),
                     ("8-Color Max", "8-Color Max")
                 ],
-                value="4-Color",
+                value="4-Color (RYBW)",
                 label=I18n.get('ext_color_mode', lang)
             )
             

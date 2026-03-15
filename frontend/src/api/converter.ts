@@ -55,6 +55,20 @@ export async function fetchLutList(): Promise<LutListResponse> {
   return response.data;
 }
 
+/** 上传 LUT 文件到预设目录 */
+export async function uploadLut(
+  file: File,
+): Promise<{ status: string; message: string; name: string }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const response = await apiClient.post<{
+    status: string;
+    message: string;
+    name: string;
+  }>("/lut/upload", fd, { timeout: 30_000 });
+  return response.data;
+}
+
 /** 根据 file_id 获取文件下载 URL */
 export function getFileUrl(fileId: string): string {
   return `/api/files/${fileId}`;

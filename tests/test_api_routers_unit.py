@@ -137,7 +137,7 @@ class TestExtractorEndpoints:
     def test_post_extract(self, client: TestClient) -> None:
         """POST /api/extractor/extract returns stub response."""
         payload = {
-            "color_mode": "4-Color",
+            "color_mode": "4-Color (RYBW)",
             "corner_points": [[0, 0], [100, 0], [100, 100], [0, 100]],
         }
         resp = client.post("/api/extractor/extract", json=payload)
@@ -163,7 +163,7 @@ class TestCalibrationEndpoints:
 
     def test_post_generate(self, client: TestClient) -> None:
         """POST /api/calibration/generate returns CalibrationResponse."""
-        payload = {"color_mode": "4-Color", "block_size": 5}
+        payload = {"color_mode": "4-Color (RYBW)", "block_size": 5}
         resp = client.post("/api/calibration/generate", json=payload)
         assert resp.status_code == 200
         body = resp.json()

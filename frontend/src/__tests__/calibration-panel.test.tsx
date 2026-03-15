@@ -10,7 +10,7 @@ vi.mock("../api/calibration", () => ({
 
 beforeEach(() => {
   useCalibrationStore.setState({
-    color_mode: CalibrationColorMode.FOUR_COLOR,
+    color_mode: CalibrationColorMode.FOUR_COLOR_RYBW,
     block_size: 5,
     gap: 0.82,
     backing: BackingColor.WHITE,
@@ -40,7 +40,7 @@ describe("CalibrationPanel", () => {
 
     // Color mode dropdown defaults to 4-Color
     const selects = screen.getAllByRole("combobox");
-    expect(selects[0]).toHaveValue(CalibrationColorMode.FOUR_COLOR);
+    expect(selects[0]).toHaveValue(CalibrationColorMode.FOUR_COLOR_RYBW);
 
     // Block size default 5 mm
     expect(screen.getByText("5 mm")).toBeInTheDocument();

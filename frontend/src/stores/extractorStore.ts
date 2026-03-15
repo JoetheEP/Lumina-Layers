@@ -4,7 +4,8 @@ import {
   ExtractorColorMode as ExtractorColorModeEnum,
   ExtractorPage as ExtractorPageEnum,
 } from "../api/types";
-import { extractColors, manualFixCell, mergeEightColor, mergeFiveColorExtended } from "../api/extractor";
+import { extractColors, manualFixCell, mergeEightColor, mergeFiveColorExtended, confirmPalette } from "../api/extractor";
+import type { ExtractorPaletteEntry } from "../api/types";
 import { clampValue } from "./converterStore";
 
 // ========== State Interface ==========
@@ -54,6 +55,12 @@ export interface ExtractorState {
   // 5色扩展双页状态
   page1Extracted_5c: boolean;
   page2Extracted_5c: boolean;
+
+  // 调色板确认
+  defaultPalette: ExtractorPaletteEntry[];
+  paletteConfirmed: boolean;
+  paletteConfirmLoading: boolean;
+  paletteConfirmError: string | null;
 }
 
 // ========== Actions Interface ==========
@@ -75,6 +82,8 @@ export interface ExtractorActions {
   submitMerge: () => Promise<void>;
   setError: (error: string | null) => void;
   clearError: () => void;
+  updatePaletteEntry: (index: number, entry: Partial<ExtractorPaletteEntry>) => void;
+  submitConfirmPalette: () => Promise<void>;
 }
 
 // ========== Default State ==========
@@ -84,7 +93,7 @@ const DEFAULT_STATE: ExtractorState = {
   imagePreviewUrl: null,
   imageNaturalWidth: null,
   imageNaturalHeight: null,
-  color_mode: ExtractorColorModeEnum.FOUR_COLOR,
+  color_mode: ExtractorColorModeEnum.FOUR_COLOR_RYBW,
   page: ExtractorPageEnum.PAGE_1,
   corner_points: [],
   offset_x: 0,
@@ -107,6 +116,10 @@ const DEFAULT_STATE: ExtractorState = {
   mergeError: null,
   page1Extracted_5c: false,
   page2Extracted_5c: false,
+  defaultPalette: [],
+  paletteConfirmed: false,
+  paletteConfirmLoading: false,
+  paletteConfirmError: null,
 };
 
 // ========== Store ==========
@@ -249,6 +262,9 @@ export const useExtractorStore = create<ExtractorState & ExtractorActions>(
             ? `${BASE}${response.lut_preview_url}`
             : null,
           isLoading: false,
+          defaultPalette: response.default_palette ?? [],
+          paletteConfirmed: false,
+          paletteConfirmError: null,
           ...pageUpdate,
         });
       } catch (err) {
@@ -320,5 +336,30 @@ export const useExtractorStore = create<ExtractorState & ExtractorActions>(
 
     setError: (error: string | null) => set({ error }),
     clearError: () => set({ error: null }),
+
+    updatePaletteEntry: (index: number, entry: Partial<ExtractorPaletteEntry>) => {
+      const palette = [...get().defaultPalette];
+      if (index >= 0 && index < palette.length) {
+        palette[index] = { ...palette[index], ...entry };
+        set({ defaultPalette: palette });
+      }
+    },
+
+    submitConfirmPalette: async () => {
+      const state = get();
+      if (!state.session_id || state.defaultPalette.length === 0) return;
+
+      set({ paletteConfirmLoading: true, paletteConfirmError: null });
+      try {
+        await confirmPalette(state.session_id, state.defaultPalette);
+        set({ paletteConfirmed: true, paletteConfirmLoading: false });
+      } catch (err) {
+        set({
+          paletteConfirmError:
+            err instanceof Error ? err.message : "调色板确认失败，请重试",
+          paletteConfirmLoading: false,
+        });
+      }
+    },
   })
 );

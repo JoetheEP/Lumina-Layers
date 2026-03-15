@@ -36,7 +36,7 @@ export default function CalibrationPanel() {
 
   const isEightColor = color_mode === CalibrationColorMode.EIGHT_COLOR;
   const isFiveColorExt = color_mode === CalibrationColorMode.FIVE_COLOR_EXT;
-  const isSixColor = color_mode === CalibrationColorMode.SIX_COLOR;
+  const isSixColor = color_mode === CalibrationColorMode.SIX_COLOR || color_mode === CalibrationColorMode.SIX_COLOR_RYBW;
   const blockSizeDisabled = isEightColor || isFiveColorExt;
   const gapDisabled = isEightColor || isFiveColorExt;
   const backingDisabled = isEightColor || isFiveColorExt || isSixColor;

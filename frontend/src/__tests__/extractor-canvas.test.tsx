@@ -58,7 +58,7 @@ function resetExtractorStore(): void {
     imagePreviewUrl: null,
     imageNaturalWidth: null,
     imageNaturalHeight: null,
-    color_mode: ExtractorColorMode.FOUR_COLOR,
+    color_mode: ExtractorColorMode.FOUR_COLOR_RYBW,
     page: ExtractorPage.PAGE_1,
     corner_points: [],
     offset_x: 0,
@@ -82,8 +82,9 @@ function resetExtractorStore(): void {
 
 const arbExtractorColorMode = fc.constantFrom(
   ExtractorColorMode.BW,
-  ExtractorColorMode.FOUR_COLOR,
+  ExtractorColorMode.FOUR_COLOR_RYBW,
   ExtractorColorMode.SIX_COLOR,
+  ExtractorColorMode.SIX_COLOR_RYBW,
   ExtractorColorMode.EIGHT_COLOR
 );
 
@@ -103,7 +104,7 @@ describe("Feature: extractor-calibration-tab, Property 2: 角点提示标签正�
   it("For any CalibrationColorMode and corner count 0..3, the hint label equals CORNER_LABELS[color_mode][corner_count]", () => {
     fc.assert(
       fc.property(arbExtractorColorMode, arbCornerCount, (colorMode, cornerCount) => {
-        const labels = CORNER_LABELS[colorMode] ?? CORNER_LABELS["4-Color"];
+        const labels = CORNER_LABELS[colorMode] ?? CORNER_LABELS["4-Color (RYBW)"];
         const expectedLabel = labels[cornerCount];
 
         // The component builds hint text as:
@@ -126,8 +127,9 @@ describe("Feature: extractor-calibration-tab, Property 2: 角点提示标签正�
     // For each color mode, verify that 4 corners shows "定位完成"
     for (const mode of [
       ExtractorColorMode.BW,
-      ExtractorColorMode.FOUR_COLOR,
+      ExtractorColorMode.FOUR_COLOR_RYBW,
       ExtractorColorMode.SIX_COLOR,
+      ExtractorColorMode.SIX_COLOR_RYBW,
       ExtractorColorMode.EIGHT_COLOR,
     ]) {
       cleanup();
@@ -180,7 +182,7 @@ describe("Feature: extractor-calibration-tab, Property 2: 角点提示标签正�
         render(<ExtractorCanvas />);
 
         const hint = screen.getByTestId("corner-hint");
-        const labels = CORNER_LABELS[colorMode] ?? CORNER_LABELS["4-Color"];
+        const labels = CORNER_LABELS[colorMode] ?? CORNER_LABELS["4-Color (RYBW)"];
         const expectedLabel = labels[cornerCount];
 
         expect(hint.textContent).toContain(expectedLabel);
@@ -217,7 +219,7 @@ describe("ExtractorCanvas 单元测试", () => {
       imagePreviewUrl: "blob:test-image",
       imageNaturalWidth: 800,
       imageNaturalHeight: 600,
-      color_mode: ExtractorColorMode.FOUR_COLOR,
+      color_mode: ExtractorColorMode.FOUR_COLOR_RYBW,
       corner_points: [
         [100, 100],
         [700, 100],
@@ -271,7 +273,7 @@ describe("ExtractorCanvas 单元测试", () => {
       imagePreviewUrl: "blob:test-image",
       imageNaturalWidth: 800,
       imageNaturalHeight: 600,
-      color_mode: ExtractorColorMode.FOUR_COLOR,
+      color_mode: ExtractorColorMode.FOUR_COLOR_RYBW,
       corner_points: [[100, 100]],
       warp_view_url: null,
       lut_preview_url: null,

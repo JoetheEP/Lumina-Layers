@@ -112,6 +112,26 @@ class SmartConfig:
         5: {"name": "Black",   "hex": "#000000", "rgb": [0, 0, 0],       "td": 0.6},
     }
 
+
+class SmartConfigRYBW:
+    """Configuration for the Smart 1296 RYBW (36x36) System.
+    RYBW 6 色系统配置：White, Red, Yellow, Blue, Green, Black。
+    """
+    GRID_DIM: int = 36
+    TOTAL_BLOCKS: int = 1296
+
+    DEFAULT_BLOCK_SIZE: float = 5.0  # mm (Face Down mode)
+    DEFAULT_GAP: float = 0.8  # mm
+
+    FILAMENTS = {
+        0: {"name": "White",  "hex": "#FFFFFF", "rgb": [255, 255, 255], "td": 5.0},
+        1: {"name": "Red",    "hex": "#DC143C", "rgb": [220, 20, 60],   "td": 3.0},
+        2: {"name": "Yellow", "hex": "#FFE600", "rgb": [255, 230, 0],   "td": 6.0},
+        3: {"name": "Blue",   "hex": "#0064F0", "rgb": [0, 100, 240],   "td": 3.5},
+        4: {"name": "Green",  "hex": "#00AE42", "rgb": [0, 174, 66],    "td": 2.0},
+        5: {"name": "Black",  "hex": "#000000", "rgb": [0, 0, 0],       "td": 0.6},
+    }
+
 class ModelingMode(str, Enum):
     """建模模式枚举"""
     HIGH_FIDELITY = "high-fidelity"  # 高保真模式
@@ -177,6 +197,24 @@ class ColorSystem:
         'corner_labels_en': ["White (TL)", "Cyan (TR)", "Magenta (BR)", "Yellow (BL)"]
     }
 
+    SIX_COLOR_RYBW = {
+        'name': '6-Color (RYBW)',
+        'base': 6,
+        'layer_count': 5,
+        'slots': ["White", "Red", "Yellow", "Blue", "Green", "Black"],
+        'preview': {
+            0: [255, 255, 255, 255],  # White
+            1: [220, 20, 60, 255],    # Red
+            2: [255, 230, 0, 255],    # Yellow
+            3: [0, 100, 240, 255],    # Blue
+            4: [0, 174, 66, 255],     # Green
+            5: [0, 0, 0, 255]         # Black
+        },
+        'map': {"White": 0, "Red": 1, "Yellow": 2, "Blue": 3, "Green": 4, "Black": 5},
+        'corner_labels': ["白色 (左上)", "红色 (右上)", "蓝色 (右下)", "黄色 (左下)"],
+        'corner_labels_en': ["White (TL)", "Red (TR)", "Blue (BR)", "Yellow (BL)"]
+    }
+
     EIGHT_COLOR = {
         'name': '8-Color Max',
         'slots': ['Slot 1 (White)', 'Slot 2 (Cyan)', 'Slot 3 (Magenta)', 'Slot 4 (Yellow)', 'Slot 5 (Black)', 'Slot 6 (Red)', 'Slot 7 (Deep Blue)', 'Slot 8 (Green)'],
@@ -237,13 +275,19 @@ class ColorSystem:
         if mode is None:
             return ColorSystem.RYBW  # Default fallback
         
-        # Unified 4-Color mode (defaults to RYBW)
-        if mode == "4-Color" or "4-Color" in mode:
+        # 4-Color CMYW variant
+        if mode in ("4-Color (CMYW)", "CMYW"):
+            return ColorSystem.CMYW
+        
+        # 4-Color RYBW variant (also handles legacy "4-Color" string)
+        if mode in ("4-Color (RYBW)", "4-Color", "RYBW") or "4-Color" in mode:
             return ColorSystem.RYBW
         
         # Check specific patterns
         if "8-Color" in mode:
             return ColorSystem.EIGHT_COLOR
+        if mode in ("6-Color (RYBW 1296)",):
+            return ColorSystem.SIX_COLOR_RYBW
         if "6-Color" in mode:
             return ColorSystem.SIX_COLOR
         
@@ -274,7 +318,7 @@ PHYSICAL_GRID_SIZE = 34
 DATA_GRID_SIZE = 32
 DST_SIZE = 1000
 CELL_SIZE = DST_SIZE / PHYSICAL_GRID_SIZE
-LUT_FILE_PATH = os.path.join(OUTPUT_DIR, "lumina_lut.npy")
+LUT_FILE_PATH = os.path.join(OUTPUT_DIR, "lumina_lut.json")
 
 # Converter constants
 PREVIEW_SCALE = 2
@@ -384,3 +428,127 @@ def get_tray_runtime_policy():
         return True, "Enabled on desktop platform"
 
     return False, f"Disabled on unsupported platform: {sys.platform}"
+
+
+# ========== LUT Palette & Metadata ==========
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class PaletteEntry:
+    """Palette entry: describes a single base color channel.
+    调色板条目：描述一个基础色通道。
+
+    Attributes:
+        color (str): Color name, e.g. "Red", "Cyan". (颜色名称)
+        material (str): Material name. (材料名称)
+        hex_color (Optional[str]): Hex color value, e.g. "#FF0000". (十六进制颜色值)
+    """
+    color: str
+    material: str = "PLA Basic"
+    hex_color: Optional[str] = None
+
+
+@dataclass
+class LUTMetadata:
+    """LUT metadata: palette + print parameters.
+    LUT 元数据：调色板 + 打印参数。
+
+    Attributes:
+        palette (list[PaletteEntry]): Palette entries. (调色板条目列表)
+        max_color_layers (int): Max color layers in recipe. (最大颜色层数)
+        layer_height_mm (float): Layer height in mm. (层高，毫米)
+        line_width_mm (float): Line width in mm. (线宽，毫米)
+        base_layers (int): Number of base layers. (底板层数)
+        base_channel_idx (int): Base channel index. (底板通道索引)
+        layer_order (str): Print order, "Top2Bottom" or "Bottom2Top". (打印顺序)
+    """
+    palette: list[PaletteEntry] = field(default_factory=list)
+    max_color_layers: int = 5
+    layer_height_mm: float = 0.08
+    line_width_mm: float = 0.42
+    base_layers: int = 10
+    base_channel_idx: int = 0
+    layer_order: str = "Top2Bottom"
+
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-compatible dictionary.
+        序列化为可 JSON 化的字典。palette 以颜色名为 key 的对象格式输出。
+
+        Returns:
+            dict: JSON-compatible dictionary. (可 JSON 化的字典)
+        """
+        palette_obj: dict = {}
+        for e in self.palette:
+            entry: dict = {"material": e.material}
+            if e.hex_color is not None:
+                entry["hex_color"] = e.hex_color
+            palette_obj[e.color] = entry
+
+        return {
+            "palette": palette_obj,
+            "max_color_layers": self.max_color_layers,
+            "layer_height_mm": self.layer_height_mm,
+            "line_width_mm": self.line_width_mm,
+            "base_layers": self.base_layers,
+            "base_channel_idx": self.base_channel_idx,
+            "layer_order": self.layer_order,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "LUTMetadata":
+        """Deserialize from a dictionary. Missing fields use defaults.
+        从字典反序列化。支持新对象格式和旧数组格式的 palette。
+
+        Args:
+            data (dict): Source dictionary. (源字典)
+
+        Returns:
+            LUTMetadata: Deserialized metadata instance. (反序列化的元数据实例)
+        """
+        palette_raw = data.get("palette", {})
+        palette: list[PaletteEntry] = []
+
+        if isinstance(palette_raw, dict):
+            # 新格式: {"White": {"material": "PLA Basic", "hex_color": "#FFF"}, ...}
+            for color_name, props in palette_raw.items():
+                if isinstance(props, dict):
+                    palette.append(PaletteEntry(
+                        color=str(color_name),
+                        material=str(props.get("material", "PLA Basic")),
+                        hex_color=props.get("hex_color"),
+                    ))
+        elif isinstance(palette_raw, list):
+            # 旧格式兼容: [{"color": "White", "material": "PLA Basic"}, ...]
+            for item in palette_raw:
+                if isinstance(item, dict) and "color" in item and "material" in item:
+                    palette.append(PaletteEntry(
+                        color=str(item["color"]),
+                        material=str(item["material"]),
+                        hex_color=item.get("hex_color"),
+                    ))
+
+        return cls(
+            palette=palette,
+            max_color_layers=int(data.get("max_color_layers", 5)),
+            layer_height_mm=float(data.get("layer_height_mm", 0.08)),
+            line_width_mm=float(data.get("line_width_mm", 0.42)),
+            base_layers=int(data.get("base_layers", 10)),
+            base_channel_idx=int(data.get("base_channel_idx", 0)),
+            layer_order=str(data.get("layer_order", "Top2Bottom")),
+        )
+
+    @staticmethod
+    def validate_color_name(name: str) -> bool:
+        """Validate that a color name is non-empty after stripping whitespace.
+        校验颜色名称非空（strip 后不为空字符串）。
+
+        Args:
+            name (str): Color name to validate. (待校验的颜色名称)
+
+        Returns:
+            bool: True if valid, False otherwise. (合法返回 True，否则 False)
+        """
+        return isinstance(name, str) and len(name.strip()) > 0

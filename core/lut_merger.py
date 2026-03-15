@@ -33,6 +33,13 @@ except ImportError:
     except ImportError:
         ColorSystem = None
 
+# Try to import LUTMetadata and PaletteEntry for palette merging
+try:
+    from config import LUTMetadata, PaletteEntry
+except ImportError:
+    LUTMetadata = None
+    PaletteEntry = None
+
 
 # Color mode size mapping
 _SIZE_TO_MODE = {
@@ -75,6 +82,9 @@ _MODE_MAX_MATERIAL = {
     "8-Color": 7,
     "Merged": 7,
 }
+
+# Standard 8-Color slot order for merged palette sorting
+_STANDARD_SLOT_ORDER = ["White", "Cyan", "Magenta", "Yellow", "Black", "Red", "Deep Blue", "Green"]
 
 # Material ID remapping tables: source mode → 8-Color material IDs
 # 8-Color slots: 0=White, 1=Cyan, 2=Magenta, 3=Yellow, 4=Black, 5=Red, 6=DeepBlue, 7=Green
@@ -162,12 +172,21 @@ class LUTMerger:
         if not lut_path or not os.path.exists(lut_path):
             raise FileNotFoundError(f"LUT file not found: {lut_path}")
 
-        if lut_path.endswith('.npz'):
+        ext = os.path.splitext(lut_path)[1].lower()
+
+        if ext == '.npz':
             data = np.load(lut_path)
             if 'rgb' in data and 'stacks' in data:
                 count = data['rgb'].shape[0]
                 return ("Merged", count)
             raise ValueError("Invalid .npz: missing 'rgb' or 'stacks' key")
+
+        if ext == '.json':
+            from utils.lut_manager import LUTManager
+            rgb, stacks, metadata = LUTManager.load_lut_with_metadata(lut_path)
+            count = len(rgb)
+            mode = _detect_mode_by_size(count)
+            return (mode or "Merged", count)
 
         # .npy file
         lut_data = np.load(lut_path)
@@ -236,11 +255,36 @@ class LUTMerger:
             data = np.load(lut_path)
             return (data['rgb'], data['stacks'])
 
+        # .json 格式：通过 LUTManager 加载
+        if lut_path.endswith('.json'):
+            from utils.lut_manager import LUTManager
+            rgb, stacks, metadata = LUTManager.load_lut_with_metadata(lut_path)
+            if stacks is not None and stacks.ndim >= 2 and stacks.shape[0] > 0 and stacks.shape[1] > 0:
+                return (rgb, stacks)
+            # 回退到索引重建：stacks 为 None 或 shape[1]==0
+            count = len(rgb)
+            return LUTMerger._rebuild_stacks_from_index(rgb, count, color_mode, lut_path)
+
         # .npy 格式：加载 RGB，根据模式重建堆叠
         lut_data = np.load(lut_path)
         rgb = lut_data.reshape(-1, 3)
         count = rgb.shape[0]
 
+        return LUTMerger._rebuild_stacks_from_index(rgb, count, color_mode, lut_path)
+
+    @staticmethod
+    def _rebuild_stacks_from_index(rgb, count, color_mode, lut_path):
+        """根据索引重建堆叠数组（从 .npy 或 .json 无 stacks 时回退使用）
+
+        Args:
+            rgb: RGB 数组 [N, 3]
+            count: 颜色数量
+            color_mode: 色彩模式字符串
+            lut_path: LUT 文件路径（用于检测子类型）
+
+        Returns:
+            (rgb_array[N,3], stacks_array[N,L])
+        """
         if color_mode == "BW":
             stacks = []
             for i in range(count):
@@ -250,8 +294,6 @@ class LUTMerger:
                     digits.append(temp % 2)
                     temp //= 2
                 stacks.append(tuple(reversed(digits)))
-            # For non-standard BW sizes (e.g. 36), extra entries beyond 32
-            # get stacks from modular arithmetic which may wrap, but RGB data is valid
             stacks_arr = np.array(stacks)
             return (rgb, _remap_stacks(stacks_arr, color_mode, lut_path))
 
@@ -270,7 +312,6 @@ class LUTMerger:
         elif color_mode == "6-Color":
             from core.calibration import get_top_1296_colors
             raw_stacks = get_top_1296_colors()
-            # 约定转换：底到顶 → 顶到底
             stacks = [tuple(reversed(s)) for s in raw_stacks]
             min_len = min(len(stacks), count)
             stacks_arr = np.array(stacks[:min_len])
@@ -280,20 +321,16 @@ class LUTMerger:
             from config import get_asset_path
             stacks_path = get_asset_path('smart_8color_stacks.npy')
             raw_stacks = np.load(stacks_path).tolist()
-            # 约定转换：底到顶 → 顶到底
             stacks = [tuple(reversed(s)) for s in raw_stacks]
             min_len = min(len(stacks), count)
             return (rgb[:min_len], np.array(stacks[:min_len]))
 
         elif color_mode == "5-Color Extended":
-            # 5-Color Extended: 2468 colors (1024 base + 1444 extended)
-            # Load from .npz file with 6-layer stacks
             if lut_path.endswith('.npz'):
                 data = np.load(lut_path)
                 stacks = data['stacks']
                 return (rgb, _remap_stacks(stacks, color_mode, lut_path))
-            
-            # Fallback: generate stacks from index
+
             base_stacks = []
             for i in range(1024):
                 digits = []
@@ -302,13 +339,10 @@ class LUTMerger:
                     digits.append(temp % 4)
                     temp //= 4
                 base_stacks.append(tuple(reversed(digits)))
-            
+
             if select_extended_1444_colors:
-                # Use the same greedy selection algorithm as the board generator
                 ext_stacks = select_extended_1444_colors(base_stacks)
             else:
-                # Emergency fallback: use the old (imperfect) linear logic
-                # WARNING: This may result in stack-index mismatch if greedy selection was used
                 print("⚠️ [LUT_MERGER] Warning: select_extended_1444_colors not found. Using linear fallback for 5C-EXT.")
                 ext_stacks = []
                 for ext_idx in range(1444):
@@ -324,40 +358,206 @@ class LUTMerger:
                             temp //= 4
                         stack = (l6,) + tuple(reversed(digits))
                     ext_stacks.append(stack)
-            
-            # Pad base 1024 stacks to 6 layers with air(-1) at viewing end
+
             padded_base = [(-1,) + s for s in base_stacks]
             stacks = padded_base + ext_stacks
-            
+
             stacks_arr = np.array(stacks[:count])
             return (rgb, _remap_stacks(stacks_arr, color_mode, lut_path))
 
         else:
-            # Non-standard mode (e.g. "Merged" from non-standard .npy sizes)
-            # Generate dummy stacks: all zeros (white-only base)
-            # The RGB data is still valid for merging
-            # Determine layer count from color_mode if possible
-            layer_count = 5  # default
+            layer_count = 5
             if ColorSystem:
                 layer_count = ColorSystem.get(color_mode).get('layer_count', 5)
             stacks = np.zeros((count, layer_count), dtype=np.int32)
             return (rgb, stacks)
 
     @staticmethod
-    def merge_luts(lut_entries, dedup_threshold=3.0):
-        """执行LUT合并
+    def validate_print_params(metadata_list: list) -> tuple:
+        """Validate print parameter consistency across multiple LUTMetadata.
+        校验多个 LUTMetadata 的打印参数一致性。
+
+        Args:
+            metadata_list (list[LUTMetadata]): List of metadata to validate.
+                (待校验的元数据列表)
+
+        Returns:
+            tuple[bool, list[str]]: (all_compatible, warning_messages).
+                (全部兼容, 警告信息列表)
+        """
+        if not metadata_list or len(metadata_list) < 2:
+            return (True, [])
+
+        warnings = []
+
+        # Collect unique layer_height_mm values (rounded to avoid float issues)
+        heights = set()
+        for m in metadata_list:
+            heights.add(round(m.layer_height_mm, 4))
+
+        if len(heights) > 1:
+            vals = ", ".join(f"{h:.4f}" for h in sorted(heights))
+            warnings.append(
+                f"layer_height_mm 不一致: {vals}"
+            )
+
+        # Collect unique line_width_mm values
+        widths = set()
+        for m in metadata_list:
+            widths.add(round(m.line_width_mm, 4))
+
+        if len(widths) > 1:
+            vals = ", ".join(f"{w:.4f}" for w in sorted(widths))
+            warnings.append(
+                f"line_width_mm 不一致: {vals}"
+            )
+
+        all_compatible = len(warnings) == 0
+        return (all_compatible, warnings)
+
+    @staticmethod
+    def merge_palettes(metadata_list: list, mode_priorities: list) -> list:
+        """Merge palettes from multiple LUTMetadata using Color_Name as key.
+        以 Color_Name 为匹配键合并多组调色板，按 8-Color 槽位排序。
+
+        Priority resolution: higher priority value wins for hex_color/material.
+        优先级解决：更高优先级的 LUT 的 hex_color/material 值被保留。
+
+        Args:
+            metadata_list (list[LUTMetadata]): List of metadata to merge.
+                (待合并的元数据列表)
+            mode_priorities (list[int]): Priority for each metadata (higher = more priority).
+                (每个元数据的优先级，越高越优先)
+
+        Returns:
+            list[PaletteEntry]: Merged palette sorted by 8-Color slot order.
+                (按 8-Color 槽位排序的合并调色板)
+        """
+        # Dict keyed by color name → (PaletteEntry, priority)
+        merged: dict[str, tuple] = {}
+
+        for meta, priority in zip(metadata_list, mode_priorities):
+            for entry in meta.palette:
+                name = entry.color
+                if name not in merged or priority > merged[name][1]:
+                    merged[name] = (entry, priority)
+                elif priority == merged[name][1]:
+                    # Same priority — keep existing (first encountered)
+                    pass
+
+        # Build result sorted by standard slot order, then custom colors
+        standard_entries = []
+        custom_entries = []
+
+        for slot_name in _STANDARD_SLOT_ORDER:
+            if slot_name in merged:
+                standard_entries.append(merged.pop(slot_name)[0])
+
+        # Remaining are custom colors — sort alphabetically
+        for name in sorted(merged.keys()):
+            custom_entries.append(merged[name][0])
+
+        return standard_entries + custom_entries
+
+    @staticmethod
+    def build_channel_remap_by_name(source_palette: list, target_palette: list) -> dict:
+        """Build channel remap table from source to target palette by color name.
+        根据颜色名称构建源调色板到目标调色板的通道重映射表。
+
+        Args:
+            source_palette (list[PaletteEntry]): Source palette entries.
+                (源调色板条目)
+            target_palette (list[PaletteEntry]): Target palette entries.
+                (目标调色板条目)
+
+        Returns:
+            dict[int, int]: Mapping source index → target index.
+                (源索引 → 目标索引的映射)
+        """
+        # Build target name → index lookup
+        target_lookup: dict[str, int] = {}
+        for idx, entry in enumerate(target_palette):
+            target_lookup[entry.color] = idx
+
+        remap: dict[int, int] = {}
+        for src_idx, entry in enumerate(source_palette):
+            if entry.color in target_lookup:
+                remap[src_idx] = target_lookup[entry.color]
+
+        return remap
+
+    @staticmethod
+    def merge_luts(lut_entries, dedup_threshold=3.0, metadata_list=None, output_path=None):
+        """执行LUT合并，支持可选的元数据集成。
+        Execute LUT merge with optional metadata integration.
 
         Args:
             lut_entries: [(rgb_array, stacks_array, color_mode), ...]
             dedup_threshold: Delta-E阈值，0表示仅精确去重
+            metadata_list (list[LUTMetadata] | None): Optional metadata for each LUT entry.
+                (每个 LUT 条目的可选元数据)
+            output_path (str | None): Optional output path; if provided, saves merged .npz
+                with metadata. (可选输出路径；若提供则保存含元数据的 .npz)
 
         Returns:
-            (merged_rgb[M,3], merged_stacks[M,L], stats_dict) where L is layer_count
+            (merged_rgb[M,3], merged_stacks[M,L], stats_dict) where L is layer_count.
+            stats_dict includes 'warnings' and 'merged_metadata' keys when metadata_list
+            is provided.
         """
         if not lut_entries:
             raise ValueError("No LUT entries to merge")
 
         total_before = sum(rgb.shape[0] for rgb, _, _ in lut_entries)
+
+        # --- Metadata integration ---
+        warnings_list = []
+        merged_metadata = None
+        merged_palette = []
+
+        if metadata_list and LUTMetadata and PaletteEntry:
+            # Auto-infer default palette for LUTs with empty palette
+            for i, meta in enumerate(metadata_list):
+                if not meta.palette:
+                    mode = lut_entries[i][2]
+                    if ColorSystem:
+                        color_conf = ColorSystem.get(mode)
+                        slots = color_conf.get("slots", [])
+                        meta.palette = [
+                            PaletteEntry(color=name, material="PLA Basic")
+                            for name in slots
+                        ]
+
+            # Validate print params
+            _, warnings_list = LUTMerger.validate_print_params(metadata_list)
+
+            # Build mode priorities from lut_entries color_mode
+            mode_priorities = [
+                _MODE_PRIORITY.get(entry[2], 0)
+                for entry in lut_entries
+            ]
+
+            # Merge palettes
+            merged_palette = LUTMerger.merge_palettes(metadata_list, mode_priorities)
+
+            # Merged print params: use highest priority LUT's values
+            best_idx = 0
+            best_priority = -999
+            for i, entry in enumerate(lut_entries):
+                p = _MODE_PRIORITY.get(entry[2], 0)
+                if p > best_priority:
+                    best_priority = p
+                    best_idx = i
+
+            best_meta = metadata_list[best_idx]
+            merged_metadata = LUTMetadata(
+                palette=merged_palette,
+                max_color_layers=best_meta.max_color_layers,
+                layer_height_mm=best_meta.layer_height_mm,
+                line_width_mm=best_meta.line_width_mm,
+                base_layers=best_meta.base_layers,
+                base_channel_idx=best_meta.base_channel_idx,
+                layer_order=best_meta.layer_order,
+            )
 
         # 1. 按色彩模式优先级排序（高优先级在前）
         sorted_entries = sorted(
@@ -431,7 +631,19 @@ class LUTMerger:
             'total_after': len(unique_rgb),
             'exact_dupes': exact_dupes,
             'similar_removed': similar_removed,
+            'warnings': warnings_list,
+            'merged_metadata': merged_metadata,
         }
+
+        # Save with metadata if output_path provided
+        if output_path and merged_metadata:
+            try:
+                from utils.lut_manager import LUTManager
+                LUTManager.save_npz_with_metadata(
+                    output_path, merged_rgb, merged_stacks, merged_metadata
+                )
+            except Exception as e:
+                print(f"[WARNING] Failed to save merged LUT with metadata: {e}")
 
         return (merged_rgb, merged_stacks, stats)
 
