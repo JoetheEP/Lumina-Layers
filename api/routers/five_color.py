@@ -32,6 +32,20 @@ _engine_cache: dict[str, ColorQueryEngine] = {}
 _engine_cache_lock = threading.Lock()
 
 
+def _extract_sources_from_keyed_json(json_path: str) -> list[str]:
+    """Extract per-entry 'source' fields from a Keyed JSON LUT file.
+    从 Keyed JSON LUT 文件中提取每条记录的 source 字段。
+    """
+    import json as _json
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = _json.load(f)
+        entries = data.get("entries", [])
+        return [e.get("source", "") if isinstance(e, dict) else "" for e in entries]
+    except Exception:
+        return []
+
+
 def _load_engine(lut_name: str) -> tuple[ColorQueryEngine, str]:
     """Load a LUT and create a ColorQueryEngine (with in-memory cache).
     加载 LUT 并创建 ColorQueryEngine（带内存缓存）。
@@ -62,6 +76,33 @@ def _load_engine(lut_name: str) -> tuple[ColorQueryEngine, str]:
                 raise HTTPException(status_code=500, detail=f"Failed to load LUT: {msg}")
             sources = StackLUTLoader.load_sources_from_json(path)
             engine = ColorQueryEngine(stack_lut=stack_data, lut_rgb=rgb_data, sources=sources)
+        elif path.endswith(".json"):
+            # Keyed JSON format — use LUTManager unified loader
+            rgb_data, stack_data, metadata = LUTManager.load_lut_with_metadata(path)
+            if rgb_data is None or len(rgb_data) == 0:
+                raise HTTPException(status_code=500, detail="Failed to load JSON LUT: no RGB data")
+            # Use palette names for color_count
+            color_count = len(metadata.palette) if metadata.palette else None
+            # Extract per-entry sources from JSON
+            sources = _extract_sources_from_keyed_json(path)
+            engine = ColorQueryEngine(
+                stack_lut=stack_data, lut_rgb=rgb_data, color_count=color_count,
+                sources=sources,
+            )
+            # Override base_colors from palette hex_color
+            if metadata.palette:
+                engine._palette_names = [e.color for e in metadata.palette]
+                base_from_palette = []
+                for e in metadata.palette:
+                    if e.hex_color:
+                        h = e.hex_color.lstrip("#")
+                        if len(h) == 6:
+                            base_from_palette.append((int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)))
+                        else:
+                            base_from_palette.append((128, 128, 128))
+                    else:
+                        base_from_palette.append((128, 128, 128))
+                engine.base_colors = base_from_palette
         else:
             # .npy file
             success, msg, rgb_data = StackLUTLoader.load_lut_rgb(path)

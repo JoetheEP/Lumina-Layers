@@ -389,6 +389,9 @@ class ColorQueryEngine:
         Returns:
             list: 颜色名称列表
         """
+        # 优先使用 palette 名称（JSON LUT 场景）
+        if hasattr(self, '_palette_names') and self._palette_names:
+            return self._palette_names
         return [get_color_name_from_rgb(rgb) for rgb in self.base_colors]
     
     def reverse_selection(self, selected_indices: List[int]) -> List[int]:

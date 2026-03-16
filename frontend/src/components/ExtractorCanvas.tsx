@@ -13,16 +13,28 @@ export const CORNER_LABELS: Record<string, string[]> = {
     "黑色 (右下) / Black (BR)",
     "黑色 (左下) / Black (BL)",
   ],
-  "4-Color": [
+  "4-Color (CMYW)": [
     "白色 (左上) / White (TL)",
     "青色 (右上) / Cyan (TR)",
     "品红 (右下) / Magenta (BR)",
+    "黄色 (左下) / Yellow (BL)",
+  ],
+  "4-Color (RYBW)": [
+    "白色 (左上) / White (TL)",
+    "红色 (右上) / Red (TR)",
+    "蓝色 (右下) / Blue (BR)",
     "黄色 (左下) / Yellow (BL)",
   ],
   "6-Color (Smart 1296)": [
     "白色 (左上) / White (TL)",
     "青色 (右上) / Cyan (TR)",
     "品红 (右下) / Magenta (BR)",
+    "黄色 (左下) / Yellow (BL)",
+  ],
+  "6-Color (RYBW 1296)": [
+    "白色 (左上) / White (TL)",
+    "红色 (右上) / Red (TR)",
+    "蓝色 (右下) / Blue (BR)",
     "黄色 (左下) / Yellow (BL)",
   ],
   "8-Color Max": ["TL", "TR", "BR", "BL"],
@@ -97,8 +109,10 @@ function drawCanvas(
 
 export const LUT_GRID_SIZE: Record<string, number> = {
   [ExtractorColorMode.BW]: 6,
-  [ExtractorColorMode.FOUR_COLOR]: 32,
+  [ExtractorColorMode.FOUR_COLOR_CMYW]: 32,
+  [ExtractorColorMode.FOUR_COLOR_RYBW]: 32,
   [ExtractorColorMode.SIX_COLOR]: 36,
+  [ExtractorColorMode.SIX_COLOR_RYBW]: 36,
   [ExtractorColorMode.EIGHT_COLOR]: 37,
   [ExtractorColorMode.FIVE_COLOR_EXT]: 38,
 };
@@ -176,7 +190,7 @@ export default function ExtractorCanvas() {
 
   // ---------- Derive hint text ----------
   const cornerCount = corner_points.length;
-  const labels = CORNER_LABELS[color_mode] ?? CORNER_LABELS["4-Color"];
+  const labels = CORNER_LABELS[color_mode] ?? CORNER_LABELS["4-Color (RYBW)"];
   const hintText =
     cornerCount >= 4
       ? t("ext_canvas_positioning_done")

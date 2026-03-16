@@ -44,7 +44,7 @@ const DEFAULT_STATE: Partial<ExtractorState> = {
   imagePreviewUrl: null,
   imageNaturalWidth: null,
   imageNaturalHeight: null,
-  color_mode: ExtractorColorMode.FOUR_COLOR,
+  color_mode: ExtractorColorMode.FOUR_COLOR_RYBW,
   page: ExtractorPage.PAGE_1,
   corner_points: [],
   offset_x: 0,

@@ -33,6 +33,7 @@ from api.schemas.converter import (
     ResetReplacementsRequest,
 )
 from api.schemas.responses import (
+    AutoDetectColorsResponse,
     BatchItemResult,
     BatchResponse,
     ColorReplaceResponse,
@@ -143,6 +144,25 @@ def get_bed_preview(
     return {"preview_3d_url": f"/api/files/{glb_id}"}
 
 
+@router.post("/auto-detect-colors", response_model=AutoDetectColorsResponse)
+async def auto_detect_colors(
+    image: UploadFile = File(..., description="输入图像"),
+    target_width_mm: float = Form(60.0, description="目标打印宽度（毫米）"),
+) -> AutoDetectColorsResponse:
+    """分析图片，自动推荐最佳量化颜色数。"""
+    temp_path = await upload_to_tempfile(image)
+    try:
+        result = ImagePreprocessor.analyze_recommended_colors(temp_path, target_width_mm)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"颜色分析失败: {e}")
+    return AutoDetectColorsResponse(
+        recommended=result.get("recommended", 48),
+        max_safe=result.get("max_safe", 64),
+        unique_colors=result.get("unique_colors", 0),
+        complexity_score=result.get("complexity_score", 0),
+    )
+
+
 @router.post("/crop", response_model=CropResponse)
 async def crop_image(
     image: UploadFile = File(..., description="输入图像"),
@@ -202,7 +222,7 @@ async def convert_preview(
     target_width_mm: float = Form(60.0, description="目标宽度 (mm)"),
     auto_bg: bool = Form(False, description="自动去背景"),
     bg_tol: int = Form(40, description="背景容差"),
-    color_mode: str = Form("4-Color", description="颜色模式"),
+    color_mode: str = Form("4-Color (RYBW)", description="颜色模式"),
     modeling_mode: str = Form("high-fidelity", description="建模模式"),
     quantize_colors: int = Form(48, description="K-Means 色彩细节"),
     enable_cleanup: bool = Form(True, description="孤立像素清理"),
@@ -687,7 +707,7 @@ async def convert_batch(
     structure_mode: str = Form("Double-sided", description="打印结构模式"),
     auto_bg: bool = Form(False, description="自动去背景"),
     bg_tol: int = Form(40, description="背景容差"),
-    color_mode: str = Form("4-Color", description="颜色模式"),
+    color_mode: str = Form("4-Color (RYBW)", description="颜色模式"),
     modeling_mode: str = Form("high-fidelity", description="建模模式"),
     quantize_colors: int = Form(48, description="K-Means 色彩细节"),
     enable_cleanup: bool = Form(True, description="孤立像素清理"),

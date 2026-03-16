@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useConverterStore, isValidImageType, ACCEPT_IMAGE_FORMATS } from "../../stores/converterStore";
 import {
@@ -73,11 +74,22 @@ export default function BasicSettings() {
   const setCropModalOpen = useConverterStore((s) => s.setCropModalOpen);
   const submitCrop = useConverterStore((s) => s.submitCrop);
   const setError = useConverterStore((s) => s.setError);
+  const uploadLut = useConverterStore((s) => s.uploadLut);
   const setBatchMode = useConverterStore((s) => s.setBatchMode);
   const addBatchFiles = useConverterStore((s) => s.addBatchFiles);
   const removeBatchFile = useConverterStore((s) => s.removeBatchFile);
 
   const lutOptions = lutList.map((name) => ({ label: name, value: name }));
+
+  const lutFileRef = useRef<HTMLInputElement>(null);
+
+  const handleLutUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadLut(file);
+    // Reset so same file can be re-uploaded
+    if (lutFileRef.current) lutFileRef.current.value = "";
+  };
 
   const handleFileSelect = (file: File) => {
     if (!isValidImageType(file.type)) {
@@ -131,13 +143,32 @@ export default function BasicSettings() {
         </>
       )}
 
-      <Dropdown
-        label={t("basic_lut_label")}
-        value={lut_name}
-        options={lutOptions}
-        onChange={setLutName}
-        placeholder={t("basic_lut_placeholder")}
-      />
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <Dropdown
+            label={t("basic_lut_label")}
+            value={lut_name}
+            options={lutOptions}
+            onChange={setLutName}
+            placeholder={t("basic_lut_placeholder")}
+          />
+        </div>
+        <input
+          ref={lutFileRef}
+          type="file"
+          accept=".npy,.json,.npz"
+          className="hidden"
+          onChange={(e) => void handleLutUpload(e)}
+        />
+        <button
+          type="button"
+          onClick={() => lutFileRef.current?.click()}
+          className="px-3 py-2 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors whitespace-nowrap"
+          title={t("basic_lut_upload")}
+        >
+          📁 {t("basic_lut_upload")}
+        </button>
+      </div>
 
       {lut_name && (
         <div className="text-xs text-gray-500 -mt-2 px-1">

@@ -33,6 +33,12 @@ try:
 except ImportError:
     HAS_SVG_LIB = False
 
+# Try to import LUTManager for metadata loading
+try:
+    from utils.lut_manager import LUTManager
+except ImportError:
+    LUTManager = None
+
 # Import palette HTML generator from extension (non-invasive)
 # Moved to lazy import to avoid circular dependency
 # from ui.palette_extension import generate_palette_html, generate_lut_color_grid_html
@@ -816,6 +822,14 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
     _hifi_timings = {}
     _hifi_t0 = time.perf_counter()
     
+    # Load LUT metadata for palette info (Task 8.2)
+    lut_metadata = None
+    if LUTManager is not None:
+        try:
+            _, _, lut_metadata = LUTManager.load_lut_with_metadata(actual_lut_path)
+        except Exception as e:
+            print(f"[CONVERTER] Warning: Failed to load LUT metadata: {e}")
+    
     try:
         processor = LuminaImageProcessor(actual_lut_path, color_mode, hue_weight=hue_weight, chroma_gate=chroma_gate)
         processor.enable_cleanup = enable_cleanup
@@ -1467,7 +1481,8 @@ def convert_image_to_3d(image_path, lut_path, target_width_mm, spacer_thick,
                 model_filename=model_filename,
                 matched_rgb=matched_rgb,
                 material_matrix=material_matrix,
-                mask_solid=mask_solid
+                mask_solid=mask_solid,
+                metadata=lut_metadata,
             )
         except Exception as e:
             print(f"[CONVERTER] Warning: Failed to generate color recipe report: {e}")
@@ -3014,6 +3029,14 @@ def generate_preview_cached(image_path, lut_path, target_width_mm,
     
     color_conf = ColorSystem.get(color_mode)
     
+    # Load LUT metadata for palette info (Task 8.1)
+    lut_metadata = None
+    if LUTManager is not None:
+        try:
+            _, _, lut_metadata = LUTManager.load_lut_with_metadata(actual_lut_path)
+        except Exception as e:
+            print(f"[CONVERTER] Warning: Failed to load LUT metadata: {e}")
+    
     try:
         print(f"[Core generate_preview_cached] hue_weight={hue_weight}, chroma_gate={chroma_gate}, color_mode={color_mode}")
         processor = LuminaImageProcessor(actual_lut_path, color_mode, hue_weight=hue_weight, chroma_gate=chroma_gate)
@@ -3053,7 +3076,8 @@ def generate_preview_cached(image_path, lut_path, target_width_mm,
         'quantize_colors': quantize_colors,
         'backing_color_id': backing_color_id,
         'is_dark': is_dark,
-        'bed_label': BedManager.DEFAULT_BED
+        'bed_label': BedManager.DEFAULT_BED,
+        'lut_metadata': lut_metadata,
     }
 
     # 统一缓存契约：保证 quantized_image 始终可用

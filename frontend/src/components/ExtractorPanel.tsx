@@ -12,6 +12,27 @@ const colorModeOptions = Object.values(ExtractorColorMode).map((v) => ({
   value: v,
 }));
 
+/** 常见 Bambu Lab 耗材类型 */
+const MATERIAL_OPTIONS = [
+  "PLA Basic",
+  "PLA Matte",
+  "PLA Silk",
+  "PLA Metal",
+  "PLA Glow",
+  "PLA Marble",
+  "PLA-CF",
+  "PETG Basic",
+  "PETG HF",
+  "PETG-CF",
+  "ABS",
+  "ASA",
+  "TPU 95A",
+  "PVA",
+  "PA",
+  "PA-CF",
+  "PC",
+];
+
 const pageOptions = Object.values(ExtractorPage).map((v) => ({
   label: v,
   value: v,
@@ -41,6 +62,10 @@ export default function ExtractorPanel() {
     page2Extracted_5c,
     mergeLoading,
     mergeError,
+    defaultPalette,
+    paletteConfirmed,
+    paletteConfirmLoading,
+    paletteConfirmError,
     setColorMode,
     setPage,
     setImageFile,
@@ -53,6 +78,8 @@ export default function ExtractorPanel() {
     submitExtract,
     submitMerge,
     clearCornerPoints,
+    updatePaletteEntry,
+    submitConfirmPalette,
   } = useExtractorStore();
 
   const isMultiPage =
@@ -143,6 +170,62 @@ export default function ExtractorPanel() {
       {/* 错误信息 */}
       {error && (
         <p data-testid="error-message" className="text-xs text-red-400">{error}</p>
+      )}
+
+      {/* 调色板确认 */}
+      {defaultPalette.length > 0 && !paletteConfirmed && (
+        <div data-testid="palette-confirm-section" className="flex flex-col gap-2 border border-gray-200 dark:border-gray-700 rounded-md p-3">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {t("ext_palette_title") ?? "调色板确认"}
+          </span>
+          {/* 统一耗材类型选择 */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-gray-500 dark:text-gray-400 shrink-0">耗材类型</span>
+            <select
+              className="flex-1 px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs"
+              value={defaultPalette[0]?.material ?? "PLA Basic"}
+              onChange={(e) => {
+                const mat = e.target.value;
+                defaultPalette.forEach((_, i) => updatePaletteEntry(i, { material: mat }));
+              }}
+            >
+              {MATERIAL_OPTIONS.map((mat) => (
+                <option key={mat} value={mat}>{mat}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            {defaultPalette.map((entry, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-xs">
+                <span
+                  className="w-4 h-4 rounded border border-gray-300 dark:border-gray-600 shrink-0"
+                  style={{ backgroundColor: entry.hex_color || "#ccc" }}
+                />
+                <input
+                  className="flex-1 px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs"
+                  value={entry.color}
+                  onChange={(e) => updatePaletteEntry(idx, { color: e.target.value })}
+                />
+              </div>
+            ))}
+          </div>
+          <Button
+            label={t("ext_confirm_palette_btn") ?? "确认调色板"}
+            variant="primary"
+            onClick={() => void submitConfirmPalette()}
+            loading={paletteConfirmLoading}
+          />
+          {paletteConfirmError && (
+            <p className="text-xs text-red-400">{paletteConfirmError}</p>
+          )}
+        </div>
+      )}
+
+      {/* 调色板已确认提示 */}
+      {paletteConfirmed && (
+        <p data-testid="palette-confirmed" className="text-xs text-green-600 dark:text-green-400">
+          {t("ext_palette_confirmed") ?? "✓ 调色板已确认"}
+        </p>
       )}
 
       {/* LUT 下载链接 */}

@@ -7,7 +7,7 @@ import { ColorMode } from "../api/types";
 
 const COLOR_MODES = [
   ColorMode.BW,
-  ColorMode.FOUR_COLOR,
+  ColorMode.FOUR_COLOR_RYBW,
   ColorMode.SIX_COLOR,
   ColorMode.EIGHT_COLOR,
   ColorMode.MERGED,

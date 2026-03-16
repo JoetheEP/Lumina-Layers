@@ -96,6 +96,7 @@ def _guess_media_type(path: str) -> str:
         ".zip": "application/zip",
         ".npy": "application/octet-stream",
         ".npz": "application/octet-stream",
+        ".json": "application/json",
         ".png": "image/png",
         ".jpg": "image/jpeg",
     }.get(ext, "application/octet-stream")

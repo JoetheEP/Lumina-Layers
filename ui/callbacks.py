@@ -896,6 +896,7 @@ def on_merge_execute(primary_name, secondary_names, dedup_threshold, lang="zh"):
         primary_rgb, primary_stacks = LUTMerger.load_lut_with_stacks(primary_path, primary_mode)
         entries = [(primary_rgb, primary_stacks, primary_mode)]
         all_modes = [primary_mode]
+        all_names = [primary_name]
 
         # Load each secondary (skip Merged LUTs to prevent stale data contamination)
         for sec_name in secondary_names:
@@ -909,6 +910,7 @@ def on_merge_execute(primary_name, secondary_names, dedup_threshold, lang="zh"):
             sec_rgb, sec_stacks = LUTMerger.load_lut_with_stacks(sec_path, sec_mode)
             entries.append((sec_rgb, sec_stacks, sec_mode))
             all_modes.append(sec_mode)
+            all_names.append(sec_name)
 
         if len(entries) < 2:
             return I18n.get('merge_error_no_lut', lang), gr.update(), gr.update()
@@ -919,7 +921,9 @@ def on_merge_execute(primary_name, secondary_names, dedup_threshold, lang="zh"):
             return I18n.get('merge_error_incompatible', lang).format(msg=err_msg), gr.update(), gr.update()
 
         # Merge
-        merged_rgb, merged_stacks, stats = LUTMerger.merge_luts(entries, dedup_threshold=dedup_threshold)
+        merged_rgb, merged_stacks, stats = LUTMerger.merge_luts(
+            entries, dedup_threshold=dedup_threshold, source_names=all_names,
+        )
 
         # Save to Custom folder
         timestamp = time.strftime("%Y%m%d_%H%M%S")

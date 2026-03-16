@@ -3,11 +3,10 @@ import { useConverterStore } from "../stores/converterStore";
 
 /**
  * Auto-trigger preview when preconditions are met.
- * 当图片已上传、LUT 已选择、裁剪模态框已关闭时，自动触发预览（300ms 防抖）。
+ * 当图片已上传、LUT 已选择、裁剪模态框已关闭、且当前图片已手动预览过时，
+ * 后续参数变化自动触发预览（300ms 防抖）。
  *
- * Uses useRef to track the last triggered combination of imageFile + lut_name,
- * preventing duplicate triggers for the same pair.
- * 使用 useRef 追踪上次触发的 imageFile 和 lut_name 组合，避免重复触发。
+ * 新上传的图片必须先手动点击"预览"按钮，之后参数变化才会自动触发。
  */
 export function useAutoPreview(): void {
   const imageFile = useConverterStore((s) => s.imageFile);
@@ -15,6 +14,7 @@ export function useAutoPreview(): void {
   const cropModalOpen = useConverterStore((s) => s.cropModalOpen);
   const hue_enable = useConverterStore((s) => s.hue_enable);
   const chroma_gate = useConverterStore((s) => s.chroma_gate);
+  const hasManualPreview = useConverterStore((s) => s.hasManualPreview);
   const submitPreview = useConverterStore((s) => s.submitPreview);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,8 +37,8 @@ export function useAutoPreview(): void {
       timerRef.current = null;
     }
 
-    // Check preconditions
-    if (!imageFile || !lut_name || cropModalOpen) {
+    // Check preconditions: 必须有图片、有 LUT、裁剪弹窗关闭、且已手动预览过
+    if (!imageFile || !lut_name || cropModalOpen || !hasManualPreview) {
       return;
     }
 
@@ -55,7 +55,12 @@ export function useAutoPreview(): void {
 
     // Debounce 300ms then trigger preview
     timerRef.current = setTimeout(() => {
-      lastTriggeredRef.current = { imageFile, lut_name, hue_enable, chroma_gate };
+      lastTriggeredRef.current = {
+        imageFile,
+        lut_name,
+        hue_enable,
+        chroma_gate,
+      };
       submitPreview();
     }, 300);
 
@@ -66,5 +71,13 @@ export function useAutoPreview(): void {
         timerRef.current = null;
       }
     };
-  }, [imageFile, lut_name, cropModalOpen, hue_enable, chroma_gate, submitPreview]);
+  }, [
+    imageFile,
+    lut_name,
+    cropModalOpen,
+    hue_enable,
+    chroma_gate,
+    hasManualPreview,
+    submitPreview,
+  ]);
 }

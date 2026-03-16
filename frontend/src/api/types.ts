@@ -8,8 +8,10 @@ export interface HealthResponse {
 
 export enum ColorMode {
   BW = "BW (Black & White)",
-  FOUR_COLOR = "4-Color",
+  FOUR_COLOR_CMYW = "4-Color (CMYW)",
+  FOUR_COLOR_RYBW = "4-Color (RYBW)",
   SIX_COLOR = "6-Color (Smart 1296)",
+  SIX_COLOR_RYBW = "6-Color (RYBW 1296)",
   EIGHT_COLOR = "8-Color Max",
   MERGED = "Merged",
 }
@@ -98,6 +100,14 @@ export interface HeightmapUploadResponse {
   warnings: string[];
 }
 
+/** 自动检测推荐量化颜色数响应 */
+export interface AutoDetectColorsResponse {
+  recommended: number;
+  max_safe: number;
+  unique_colors: number;
+  complexity_score: number;
+}
+
 // ========== Response Models ==========
 
 /** 预览接口响应，包含 session_id 和预览图 URL */
@@ -146,9 +156,11 @@ export interface BedSizeListResponse {
 
 export enum CalibrationColorMode {
   BW = "BW (Black & White)",
-  FOUR_COLOR = "4-Color",
+  FOUR_COLOR_CMYW = "4-Color (CMYW)",
+  FOUR_COLOR_RYBW = "4-Color (RYBW)",
   FIVE_COLOR_EXT = "5-Color Extended (1444)",
   SIX_COLOR = "6-Color (Smart 1296)",
+  SIX_COLOR_RYBW = "6-Color (RYBW 1296)",
   EIGHT_COLOR = "8-Color Max",
 }
 
@@ -183,9 +195,11 @@ export interface CalibrationResponse {
 
 export enum ExtractorColorMode {
   BW = "BW (Black & White)",
-  FOUR_COLOR = "4-Color",
+  FOUR_COLOR_CMYW = "4-Color (CMYW)",
+  FOUR_COLOR_RYBW = "4-Color (RYBW)",
   FIVE_COLOR_EXT = "5-Color Extended",
   SIX_COLOR = "6-Color (Smart 1296)",
+  SIX_COLOR_RYBW = "6-Color (RYBW 1296)",
   EIGHT_COLOR = "8-Color Max",
 }
 
@@ -196,6 +210,13 @@ export enum ExtractorPage {
 
 // ========== Extractor Response Models ==========
 
+/** 调色板条目（提取器返回的默认调色板） */
+export interface ExtractorPaletteEntry {
+  color: string;
+  material: string;
+  hex_color: string;
+}
+
 export interface ExtractResponse {
   session_id: string;
   status: string;
@@ -203,6 +224,7 @@ export interface ExtractResponse {
   lut_download_url: string;
   warp_view_url: string;
   lut_preview_url: string;
+  default_palette: ExtractorPaletteEntry[];
 }
 
 export interface ManualFixResponse {

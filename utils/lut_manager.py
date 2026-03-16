@@ -6,9 +6,14 @@ LUT preset management module
 import os
 import re
 import sys
+import json
 import shutil
 import glob
 from pathlib import Path
+
+import numpy as np
+
+from config import LUTMetadata, PaletteEntry, ColorSystem, PrinterConfig
 
 
 class LUTManager:
@@ -51,11 +56,19 @@ class LUTManager:
             print(f"[LUT_MANAGER] Warning: LUT preset directory not found: {cls.LUT_PRESET_DIR}")
             return lut_files
         
-        # Recursively search for all .npy and .npz files
+        # Recursively search for all .npy, .json and .npz files
         npy_pattern = os.path.join(cls.LUT_PRESET_DIR, "**", "*.npy")
+        json_pattern = os.path.join(cls.LUT_PRESET_DIR, "**", "*.json")
         npz_pattern = os.path.join(cls.LUT_PRESET_DIR, "**", "*.npz")
         
-        all_files = glob.glob(npy_pattern, recursive=True) + glob.glob(npz_pattern, recursive=True)
+        all_files = glob.glob(npy_pattern, recursive=True) + \
+                    glob.glob(json_pattern, recursive=True) + \
+                    glob.glob(npz_pattern, recursive=True)
+        
+        # Priority: .json > .npz > .npy (higher priority overwrites lower)
+        _EXT_PRIORITY = {".npy": 0, ".npz": 1, ".json": 2}
+        # Track priority of each display_name to avoid lower-priority overwrite
+        _name_priority: dict[str, int] = {}
         
         for file_path in all_files:
             # Generate friendly display name
@@ -73,7 +86,12 @@ class LUTManager:
                 filename = Path(rel_path).stem
                 display_name = filename
             
-            lut_files[display_name] = file_path
+            ext = Path(file_path).suffix.lower()
+            priority = _EXT_PRIORITY.get(ext, -1)
+            
+            if display_name not in lut_files or priority > _name_priority.get(display_name, -1):
+                lut_files[display_name] = file_path
+                _name_priority[display_name] = priority
         
         # Sort by name
         lut_files = dict(sorted(lut_files.items()))
@@ -115,14 +133,19 @@ class LUTManager:
         if "8色" in combined or "8-COLOR" in combined or "8COLOR" in combined:
             return "8-Color Max"
         if "6色" in combined or "6-COLOR" in combined or "6COLOR" in combined:
+            if "RYBW" in combined or "红黄蓝" in combined:
+                return "6-Color (RYBW 1296)"
             return "6-Color (Smart 1296)"
+        # 5-Color Extended 必须在 4-Color 之前检测
+        if "5色" in combined or "5-COLOR" in combined or "5COLOR" in combined:
+            return "5-Color Extended"
         # CMYW/RYBW 必须在 BW 之前检测，避免 "RYBW" 中的 "BW" 误匹配
         if "CMYW" in combined or "青品黄" in combined:
-            return "4-Color"
+            return "4-Color (CMYW)"
         if "RYBW" in combined or "红黄蓝" in combined:
-            return "4-Color"
+            return "4-Color (RYBW)"
         if "4色" in combined or "4-COLOR" in combined or "4COLOR" in combined:
-            return "4-Color"
+            return "4-Color (CMYW)"
         # BW 单独检测：排除 RYBW/CMYW 已匹配的情况
         if "黑白" in combined or "B&W" in combined:
             return "BW (Black & White)"
@@ -130,8 +153,8 @@ class LUTManager:
         if re.search(r"(?<![A-Z])BW(?![A-Z])", combined):
             return "BW (Black & White)"
 
-        # 默认回退为 4-Color
-        return "4-Color"
+        # 默认回退为 4-Color (CMYW)
+        return "4-Color (CMYW)"
     
     @classmethod
     def get_lut_path(cls, display_name: str) -> str | None:
@@ -173,8 +196,8 @@ class LUTManager:
             file_extension = original_path.suffix  # .npy
             
             # Validate file extension
-            if file_extension not in ('.npy', '.npz'):
-                return False, f"[ERROR] Invalid file type: {file_extension}. Only .npy and .npz are supported.", cls.get_lut_choices()
+            if file_extension not in ('.npy', '.json', '.npz'):
+                return False, f"[ERROR] Invalid file type: {file_extension}. Only .npy, .json and .npz are supported.", cls.get_lut_choices()
             
             # Use custom name or original name
             if custom_name and custom_name.strip():
@@ -189,17 +212,37 @@ class LUTManager:
             if not final_name:
                 final_name = "custom_lut"
             
+            # Auto-convert .npy to Keyed JSON
+            if file_extension == '.npy':
+                dest_extension = '.json'
+            else:
+                dest_extension = file_extension
+            
             # Build target path with correct extension
-            dest_path = os.path.join(custom_dir, f"{final_name}{file_extension}")
+            dest_path = os.path.join(custom_dir, f"{final_name}{dest_extension}")
             
             # If file exists, add numeric suffix
             counter = 1
             while os.path.exists(dest_path):
-                dest_path = os.path.join(custom_dir, f"{final_name}_{counter}{file_extension}")
+                dest_path = os.path.join(custom_dir, f"{final_name}_{counter}{dest_extension}")
                 counter += 1
             
-            # Copy file
-            shutil.copy2(uploaded_file.name, dest_path)
+            if file_extension == '.npy':
+                # Convert .npy to Keyed JSON
+                try:
+                    rgb = np.load(uploaded_file.name)
+                    if rgb.ndim == 3:
+                        rgb = rgb.reshape(-1, 3)
+                    elif rgb.ndim == 1:
+                        rgb = rgb.reshape(-1, 3)
+                    metadata = cls.infer_default_metadata(final_name, uploaded_file.name, len(rgb))
+                    stacks = np.zeros((len(rgb), 0), dtype=np.int32)
+                    cls.save_keyed_json(dest_path, rgb, stacks, metadata)
+                except Exception as e:
+                    return False, f"[ERROR] Failed to convert .npy to JSON: {e}", cls.get_lut_choices()
+            else:
+                # Copy file directly for .json and .npz
+                shutil.copy2(uploaded_file.name, dest_path)
             
             # Build display name
             display_name = f"Custom - {Path(dest_path).stem}"
@@ -239,3 +282,340 @@ class LUTManager:
         except Exception as e:
             print(f"[LUT_MANAGER] Error deleting LUT: {e}")
             return False, f"[ERROR] Delete failed: {e}", cls.get_lut_choices()
+
+    # ------------------------------------------------------------------
+    # Metadata-aware loading / saving (Task 4)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def infer_default_metadata(cls, display_name: str, file_path: str,
+                               color_count: int) -> LUTMetadata:
+        """Infer default LUTMetadata from filename and color count.
+        根据文件名和颜色数量推断默认元数据。
+
+        Args:
+            display_name (str): LUT display name. (LUT 显示名称)
+            file_path (str): LUT file path. (LUT 文件路径)
+            color_count (int): Number of colors in the LUT. (LUT 中的颜色数量)
+
+        Returns:
+            LUTMetadata: Inferred default metadata. (推断的默认元数据)
+        """
+        mode = cls.infer_color_mode(display_name, file_path)
+        color_conf = ColorSystem.get(mode)
+        slots = color_conf.get("slots", [])
+
+        palette = [
+            PaletteEntry(color=name, material="PLA Basic")
+            for name in slots
+        ]
+
+        return LUTMetadata(
+            palette=palette,
+            max_color_layers=PrinterConfig.COLOR_LAYERS,
+            layer_height_mm=PrinterConfig.LAYER_HEIGHT,
+            line_width_mm=PrinterConfig.NOZZLE_WIDTH,
+            base_layers=10,
+            base_channel_idx=0,
+            layer_order="Top2Bottom",
+        )
+
+    @classmethod
+    def load_lut_with_metadata(cls, file_path: str) -> tuple[np.ndarray, np.ndarray | None, LUTMetadata]:
+        """Load LUT file and return (rgb, stacks_or_None, metadata).
+        统一加载 LUT 文件，返回 (rgb, stacks_or_None, metadata)。
+
+        Supports .npy, .json (Keyed JSON), and .npz formats.
+        支持 .npy、.json（Keyed JSON）和 .npz 三种格式。
+
+        Args:
+            file_path (str): Path to the LUT file. (LUT 文件路径)
+
+        Returns:
+            tuple: (rgb ndarray, stacks ndarray or None, LUTMetadata).
+        """
+        ext = os.path.splitext(file_path)[1].lower()
+        display_name = Path(file_path).stem
+
+        # ---- .npy format ----
+        if ext == ".npy":
+            try:
+                rgb = np.load(file_path)
+            except Exception as e:
+                print(f"[WARNING] Failed to load .npy file {file_path}: {e}")
+                rgb = np.zeros((0, 3), dtype=np.uint8)
+            metadata = cls.infer_default_metadata(display_name, file_path, len(rgb))
+            return rgb, None, metadata
+
+        # ---- .json (Keyed JSON) format ----
+        if ext == ".json":
+            return cls._load_keyed_json(file_path, display_name)
+
+        # ---- .npz format ----
+        if ext == ".npz":
+            return cls._load_npz(file_path, display_name)
+
+        # Unsupported format – return empty defaults
+        print(f"[WARNING] Unsupported LUT format: {ext}")
+        rgb = np.zeros((0, 3), dtype=np.uint8)
+        metadata = cls.infer_default_metadata(display_name, file_path, 0)
+        return rgb, None, metadata
+
+    # ---- private helpers ----
+
+    @classmethod
+    def _load_keyed_json(cls, file_path: str, display_name: str) -> tuple[np.ndarray, np.ndarray | None, LUTMetadata]:
+        """Load a Keyed JSON LUT file.
+        加载 Keyed JSON 格式的 LUT 文件。支持新对象格式和旧数组格式的 palette/recipe。
+        """
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"[WARNING] Failed to parse JSON file {file_path}: {e}")
+            rgb = np.zeros((0, 3), dtype=np.uint8)
+            metadata = cls.infer_default_metadata(display_name, file_path, 0)
+            return rgb, None, metadata
+
+        # Parse palette — support both object and legacy array format
+        palette_raw = data.get("palette", {})
+        palette: list[PaletteEntry] = []
+
+        if isinstance(palette_raw, dict):
+            # 新格式: {"White": {"material": "PLA Basic", "hex_color": "#FFF"}, ...}
+            for color_name, props in palette_raw.items():
+                if isinstance(props, dict):
+                    palette.append(PaletteEntry(
+                        color=str(color_name),
+                        material=str(props.get("material", "PLA Basic")),
+                        hex_color=props.get("hex_color"),
+                    ))
+        elif isinstance(palette_raw, list):
+            # 旧格式兼容: [{"color": "White", "material": "PLA Basic"}, ...]
+            for item in palette_raw:
+                if isinstance(item, dict) and "color" in item and "material" in item:
+                    palette.append(PaletteEntry(
+                        color=str(item["color"]),
+                        material=str(item["material"]),
+                        hex_color=item.get("hex_color"),
+                    ))
+                else:
+                    print(f"[WARNING] Skipping invalid palette entry: {item}")
+
+        # Build metadata
+        metadata = LUTMetadata(
+            palette=palette,
+            max_color_layers=int(data.get("max_color_layers", PrinterConfig.COLOR_LAYERS)),
+            layer_height_mm=float(data.get("layer_height_mm", PrinterConfig.LAYER_HEIGHT)),
+            line_width_mm=float(data.get("line_width_mm", PrinterConfig.NOZZLE_WIDTH)),
+            base_layers=int(data.get("base_layers", 10)),
+            base_channel_idx=int(data.get("base_channel_idx", 0)),
+            layer_order=str(data.get("layer_order", "Top2Bottom")),
+        )
+
+        # If palette is empty, infer defaults
+        if not metadata.palette:
+            print(f"[WARNING] No valid palette in {file_path}, inferring defaults")
+            default_meta = cls.infer_default_metadata(display_name, file_path, 0)
+            metadata.palette = default_meta.palette
+
+        # Build name→index mapping for recipe resolution
+        name_to_idx: dict[str, int] = {
+            e.color: i for i, e in enumerate(metadata.palette)
+        }
+
+        # Parse entries → rgb + stacks
+        entries = data.get("entries", [])
+        rgb_list: list[list[int]] = []
+        stacks_list: list[list[int]] = []
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            # Prefer stored RGB for exact roundtrip; fall back to Lab→RGB
+            rgb_val = entry.get("rgb")
+            lab = entry.get("lab")
+            if rgb_val and len(rgb_val) == 3:
+                r = max(0, min(255, int(rgb_val[0])))
+                g = max(0, min(255, int(rgb_val[1])))
+                b = max(0, min(255, int(rgb_val[2])))
+                rgb_list.append([r, g, b])
+            elif lab and len(lab) == 3:
+                try:
+                    from colormath.color_objects import LabColor, sRGBColor
+                    from colormath.color_conversions import convert_color
+                    lab_color = LabColor(float(lab[0]), float(lab[1]), float(lab[2]))
+                    srgb = convert_color(lab_color, sRGBColor)
+                    r = max(0, min(255, int(round(srgb.clamped_rgb_r * 255))))
+                    g = max(0, min(255, int(round(srgb.clamped_rgb_g * 255))))
+                    b = max(0, min(255, int(round(srgb.clamped_rgb_b * 255))))
+                    rgb_list.append([r, g, b])
+                except Exception as e:
+                    print(f"[WARNING] Lab→RGB conversion failed for {lab}: {e}")
+                    rgb_list.append([0, 0, 0])
+            else:
+                rgb_list.append([0, 0, 0])
+
+            # Recipe: resolve color names to indices, support both formats
+            recipe_raw = entry.get("recipe", [])
+            recipe_indices: list[int] = []
+            for v in recipe_raw:
+                if isinstance(v, str):
+                    # 新格式: 颜色名 → 索引
+                    if v == "Air":
+                        recipe_indices.append(-1)
+                    elif v in name_to_idx:
+                        recipe_indices.append(name_to_idx[v])
+                    else:
+                        print(f"[WARNING] Unknown color name in recipe: {v}")
+                        recipe_indices.append(0)
+                else:
+                    # 旧格式兼容: 直接是数字索引
+                    recipe_indices.append(int(v))
+            stacks_list.append(recipe_indices)
+
+        if rgb_list:
+            rgb = np.array(rgb_list, dtype=np.uint8)
+        else:
+            rgb = np.zeros((0, 3), dtype=np.uint8)
+
+        if stacks_list:
+            stacks = np.array(stacks_list, dtype=np.int32)
+        else:
+            stacks = None
+
+        return rgb, stacks, metadata
+
+    @classmethod
+    def _load_npz(cls, file_path: str, display_name: str) -> tuple[np.ndarray, np.ndarray | None, LUTMetadata]:
+        """Load a .npz LUT file with optional metadata_json.
+        加载 .npz 格式的 LUT 文件，解析可选的 metadata_json 键。
+        """
+        try:
+            npz = np.load(file_path, allow_pickle=False)
+        except Exception as e:
+            print(f"[WARNING] Failed to load .npz file {file_path}: {e}")
+            rgb = np.zeros((0, 3), dtype=np.uint8)
+            metadata = cls.infer_default_metadata(display_name, file_path, 0)
+            return rgb, None, metadata
+
+        rgb = npz.get("rgb", np.zeros((0, 3), dtype=np.uint8))
+        stacks = npz.get("stacks", None)
+
+        # Parse metadata_json if present
+        metadata_json_str = None
+        if "metadata_json" in npz:
+            try:
+                metadata_json_str = str(npz["metadata_json"])
+            except Exception:
+                pass
+
+        if metadata_json_str:
+            try:
+                meta_dict = json.loads(metadata_json_str)
+                metadata = LUTMetadata.from_dict(meta_dict)
+            except Exception as e:
+                print(f"[WARNING] Failed to parse metadata_json in {file_path}: {e}")
+                metadata = cls.infer_default_metadata(display_name, file_path, len(rgb))
+        else:
+            metadata = cls.infer_default_metadata(display_name, file_path, len(rgb))
+
+        return rgb, stacks, metadata
+
+    @classmethod
+    def save_keyed_json(cls, path: str, rgb: np.ndarray, stacks: np.ndarray,
+                        metadata: LUTMetadata, lab: np.ndarray | None = None,
+                        sources: list[str] | None = None) -> None:
+        """Save LUT data as Keyed JSON format.
+        将 LUT 数据保存为 Keyed JSON 格式。
+
+        Args:
+            path (str): Output file path. (输出文件路径)
+            rgb (np.ndarray): RGB array (N, 3) uint8. (RGB 数组)
+            stacks (np.ndarray): Stacks array (N, L) int32. (堆叠配方数组)
+            metadata (LUTMetadata): LUT metadata. (LUT 元数据)
+            lab (np.ndarray | None): Optional Lab array (N, 3). If None, convert from RGB.
+                                     (可选 Lab 数组，为 None 时从 RGB 转换)
+            sources (list[str] | None): Optional per-entry source labels (e.g. origin LUT name).
+                                        (可选的每条记录来源标识)
+        """
+        meta_dict = metadata.to_dict()
+
+        # Build name from filename
+        meta_dict["name"] = Path(path).stem
+
+        # Build palette name list for recipe index → name mapping
+        palette_names = [e.color for e in metadata.palette]
+
+        # Build entries
+        entries = []
+        n = len(rgb)
+
+        # Batch RGB → Lab conversion using OpenCV (much faster than per-entry colormath)
+        if lab is None:
+            import cv2
+            rgb_arr = np.array(rgb[:n], dtype=np.uint8).reshape(1, n, 3)
+            lab_arr = cv2.cvtColor(rgb_arr, cv2.COLOR_RGB2Lab).reshape(n, 3).astype(float)
+            # OpenCV Lab range: L [0,255], a [0,255], b [0,255] → standard L [0,100], a [-128,127], b [-128,127]
+            lab_arr[:, 0] = lab_arr[:, 0] * 100.0 / 255.0
+            lab_arr[:, 1] = lab_arr[:, 1] - 128.0
+            lab_arr[:, 2] = lab_arr[:, 2] - 128.0
+        else:
+            lab_arr = np.array(lab[:n], dtype=float)
+
+        for i in range(n):
+            entry: dict = {}
+            # Store original RGB for exact roundtrip
+            entry["rgb"] = [int(rgb[i][0]), int(rgb[i][1]), int(rgb[i][2])]
+            # Lab values (pre-computed batch)
+            entry["lab"] = [
+                round(float(lab_arr[i][0]), 6),
+                round(float(lab_arr[i][1]), 6),
+                round(float(lab_arr[i][2]), 6),
+            ]
+
+            # Recipe: use palette color names instead of numeric indices
+            if stacks is not None and i < len(stacks):
+                recipe_names = []
+                for v in stacks[i]:
+                    idx = int(v)
+                    if idx == -1:
+                        recipe_names.append("Air")
+                    elif 0 <= idx < len(palette_names):
+                        recipe_names.append(palette_names[idx])
+                    else:
+                        recipe_names.append(f"Unknown({idx})")
+                entry["recipe"] = recipe_names
+            else:
+                entry["recipe"] = []
+
+            # Source label (origin LUT name for merged entries)
+            if sources and i < len(sources):
+                entry["source"] = sources[i]
+
+            entries.append(entry)
+
+        meta_dict["entries"] = entries
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(meta_dict, f, ensure_ascii=False, indent=4)
+
+    @classmethod
+    def save_npz_with_metadata(cls, path: str, rgb: np.ndarray, stacks: np.ndarray,
+                               metadata: LUTMetadata) -> None:
+        """Save LUT data as .npz with metadata_json key.
+        将 LUT 数据保存为 .npz 格式，含 metadata_json 键。
+
+        Args:
+            path (str): Output file path. (输出文件路径)
+            rgb (np.ndarray): RGB array (N, 3) uint8. (RGB 数组)
+            stacks (np.ndarray): Stacks array (N, L) int32. (堆叠配方数组)
+            metadata (LUTMetadata): LUT metadata. (LUT 元数据)
+        """
+        metadata_json_str = json.dumps(metadata.to_dict(), ensure_ascii=False)
+        np.savez(
+            path,
+            rgb=rgb,
+            stacks=stacks,
+            metadata_json=np.array(metadata_json_str),
+        )

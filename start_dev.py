@@ -131,6 +131,7 @@ class ServiceProcess:
                 return
 
         _log(self.name, self.color, f"启动中... (port={self.port})")
+        # 使用 start_new_session 创建新进程组，确保重启时能杀死所有子进程
         self.proc = subprocess.Popen(
             self.cmd,
             cwd=self.cwd,
@@ -138,6 +139,7 @@ class ServiceProcess:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            start_new_session=(os.name != "nt"),
             shell=(os.name == "nt" and self.name == "Frontend"),
         )
         self._reader_thread = threading.Thread(
@@ -161,13 +163,42 @@ class ServiceProcess:
     def stop(self) -> None:
         if self.proc and self.proc.poll() is None:
             _log(self.name, self.color, f"正在停止 (pid={self.proc.pid})...")
-            self.proc.terminate()
+            # 先杀整个进程组（包含所有子进程），再 fallback 到单进程
+            pgid = None
+            if os.name != "nt":
+                try:
+                    pgid = os.getpgid(self.proc.pid)
+                except OSError:
+                    pgid = None
+
+            if pgid is not None:
+                try:
+                    os.killpg(pgid, signal.SIGTERM)
+                except OSError:
+                    pass
+            else:
+                self.proc.terminate()
+
             try:
                 self.proc.wait(timeout=SHUTDOWN_TIMEOUT)
             except subprocess.TimeoutExpired:
                 _log(self.name, self.color, "强制终止")
-                self.proc.kill()
-                self.proc.wait(timeout=3)
+                if pgid is not None:
+                    try:
+                        os.killpg(pgid, signal.SIGKILL)
+                    except OSError:
+                        pass
+                else:
+                    self.proc.kill()
+                try:
+                    self.proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    pass
+
+            # 确保端口被释放
+            if is_port_in_use(self.port):
+                kill_port(self.port)
+
         self.proc = None
 
     @property

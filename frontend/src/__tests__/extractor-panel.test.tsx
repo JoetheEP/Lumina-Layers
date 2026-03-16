@@ -44,7 +44,7 @@ function resetExtractorStore(): void {
     imagePreviewUrl: null,
     imageNaturalWidth: null,
     imageNaturalHeight: null,
-    color_mode: ExtractorColorMode.FOUR_COLOR,
+    color_mode: ExtractorColorMode.FOUR_COLOR_RYBW,
     page: ExtractorPage.PAGE_1,
     corner_points: [],
     offset_x: 0,
@@ -139,11 +139,12 @@ describe("ExtractorPanel 单元测试", () => {
     const optionValues = options.map((o) => o.value);
 
     expect(optionValues).toContain(ExtractorColorMode.BW);
-    expect(optionValues).toContain(ExtractorColorMode.FOUR_COLOR);
+    expect(optionValues).toContain(ExtractorColorMode.FOUR_COLOR_RYBW);
     expect(optionValues).toContain(ExtractorColorMode.FIVE_COLOR_EXT);
     expect(optionValues).toContain(ExtractorColorMode.SIX_COLOR);
+    expect(optionValues).toContain(ExtractorColorMode.SIX_COLOR_RYBW);
     expect(optionValues).toContain(ExtractorColorMode.EIGHT_COLOR);
-    expect(options.length).toBe(5);
+    expect(options.length).toBe(7);
   });
 
   it("shows page-select when color_mode is EIGHT_COLOR", async () => {
@@ -161,7 +162,7 @@ describe("ExtractorPanel 单元测试", () => {
 
     for (const mode of [
       ExtractorColorMode.BW,
-      ExtractorColorMode.FOUR_COLOR,
+      ExtractorColorMode.FOUR_COLOR_RYBW,
       ExtractorColorMode.SIX_COLOR,
     ]) {
       cleanup();

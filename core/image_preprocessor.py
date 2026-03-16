@@ -21,7 +21,7 @@ try:
     HAS_HEIF = True
 except ImportError:
     HAS_HEIF = False
-    print("⚠️ [HEIC] pillow-heif not installed. HEIC/HEIF support disabled.")
+    print("[WARN] [HEIC] pillow-heif not installed. HEIC/HEIF support disabled.")
 
 
 @dataclass
