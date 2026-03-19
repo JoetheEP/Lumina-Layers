@@ -6,6 +6,7 @@ import { useVectorizerStore } from "../stores/vectorizerStore";
 import { useConverterStore } from "../stores/converterStore";
 import { useWidgetStore } from "../stores/widgetStore";
 import { usePanZoom } from "../hooks/usePanZoom";
+import apiClient from "../api/client";
 import ImageUpload from "./ui/ImageUpload";
 import Slider from "./ui/Slider";
 import Checkbox from "./ui/Checkbox";
@@ -15,6 +16,16 @@ import Accordion from "./ui/Accordion";
 import ZoomViewport from "./ui/ZoomViewport";
 
 const ACCEPT_FORMATS = "image/png,image/jpeg,image/webp,image/bmp";
+
+/**
+ * Build full URL from a relative API file path.
+ * In dev mode (frontend :5173, backend :8000), apiClient.defaults.baseURL
+ * points to the backend origin, so we prepend it to ensure correct resolution.
+ */
+export function buildFileUrl(relativePath: string): string {
+  const base = apiClient.defaults.baseURL ?? "";
+  return `${base}${relativePath}`;
+}
 
 export default function VectorizerPanel() {
   const { t } = useI18n();
@@ -60,7 +71,7 @@ export default function VectorizerPanel() {
   const handleDownload = useCallback(() => {
     if (!svgUrl) return;
     const a = document.createElement("a");
-    a.href = svgUrl;
+    a.href = buildFileUrl(svgUrl);
     a.download = "vectorized.svg";
     a.click();
   }, [svgUrl]);
@@ -70,8 +81,8 @@ export default function VectorizerPanel() {
     if (!svgUrl) return;
     setIsSending(true);
     try {
-      const res = await fetch(svgUrl);
-      const blob = await res.blob();
+      const res = await apiClient.get(svgUrl, { responseType: "blob" });
+      const blob = res.data as Blob;
       const file = new File([blob], "vectorized.svg", { type: "image/svg+xml" });
       useConverterStore.getState().setImageFile(file);
       useWidgetStore.getState().setActiveTab("converter");

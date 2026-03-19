@@ -22,5 +22,5 @@ fastapi
 uvicorn
 httpx
 numba
-# Image vectorizer
+# Vectorizer (C++ image-to-SVG)
 neroued-vectorizer>=0.1.1

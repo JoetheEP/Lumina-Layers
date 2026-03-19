@@ -42,30 +42,34 @@ def worker_vectorize(image_path: str, params: dict) -> dict:
 
     import neroued_vectorizer as nv
 
-    config = nv.VectorizerConfig()
-    for key, value in params.items():
-        if hasattr(config, key):
-            setattr(config, key, value)
+    try:
+        config = nv.VectorizerConfig()
+        for key, value in params.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
 
-    print(f"[Worker vectorize] image={image_path}, params={params}")
+        print(f"[Worker vectorize] image={image_path}, params={params}")
 
-    result = nv.vectorize(image_path, config)
+        result = nv.vectorize(image_path, config)
 
-    fd, svg_path = tempfile.mkstemp(suffix=".svg")
-    os.close(fd)
-    with open(svg_path, "w", encoding="utf-8") as f:
-        f.write(result.svg_content)
+        fd, svg_path = tempfile.mkstemp(suffix=".svg")
+        os.close(fd)
+        with open(svg_path, "w", encoding="utf-8") as f:
+            f.write(result.svg_content)
 
-    palette_hex = []
-    for rgb in result.palette:
-        r, g, b = rgb.to_rgb255()
-        palette_hex.append(f"#{r:02x}{g:02x}{b:02x}")
+        palette_hex = []
+        for rgb in result.palette:
+            r, g, b = rgb.to_rgb255()
+            palette_hex.append(f"#{r:02x}{g:02x}{b:02x}")
 
-    return {
-        "svg_path": svg_path,
-        "width": result.width,
-        "height": result.height,
-        "num_shapes": result.num_shapes,
-        "num_colors": result.resolved_num_colors,
-        "palette": palette_hex,
-    }
+        return {
+            "svg_path": svg_path,
+            "width": result.width,
+            "height": result.height,
+            "num_shapes": result.num_shapes,
+            "num_colors": result.resolved_num_colors,
+            "palette": palette_hex,
+        }
+    finally:
+        if os.path.exists(image_path):
+            os.unlink(image_path)

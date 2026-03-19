@@ -9,6 +9,7 @@ the neroued_vectorizer library.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import ValidationError
 
 from api.dependencies import get_file_registry, get_worker_pool
 from api.file_bridge import ensure_png_tempfile
@@ -64,7 +65,10 @@ async def vectorize_image(
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=422, detail=f"Invalid params JSON: {e}")
 
-    validated = VectorizeParams(**params_dict)
+    try:
+        validated = VectorizeParams(**params_dict)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
     params_clean = validated.model_dump()
 
     image_path = await ensure_png_tempfile(image)
